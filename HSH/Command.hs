@@ -54,6 +54,10 @@ import Data.Maybe
 {- | Result type for shell commands -}
 type InvokeResult = (String, IO ProcessStatus)
 
+{- | Type for functions. -}
+data InvokeType = Forking | NonForking | Pipe
+                deriving (Eq, Show)
+
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
 commands must define these methods. 
@@ -73,8 +77,8 @@ class (Show a) => ShellCommand a where
     fdInvoke :: a               -- ^ The command
              -> Fd              -- ^ fd to pass to it as stdin
              -> Fd              -- ^ fd to pass to it as stdout
-             -> (ProcessID -> IO ()) -- ^ If this invocation forks, action to run post-fork in parent.  Ignored if invocation doesn't fork.
-             -> IO ()           -- ^ If this invocation forks, action to run post-fork in client.  Ignored if invocation doesn't fork.
+             -> (ProcessID -> InvokeType -> IO ()) -- ^ Action to run post-fork in parent (or in main process if it doesn't fork; PID is 0 in these cases)
+             -> (InvokeType -> IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show ([Char] -> [Char]) where
@@ -83,12 +87,14 @@ instance Show ([Char] -> [Char]) where
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String. -}
 instance ShellCommand ([Char] -> [Char]) where
-    fdInvoke func fstdin fstdout _ _ =
+    fdInvoke func fstdin fstdout parentfunc childfunc =
         do hreader <- fdToHandle fstdin
            hwriter <- fdToHandle fstdout
            incontents <- hGetContents hreader
            mv <- newEmptyMVar
-           forkIO $ do hPutStr hwriter (func incontents)
+           parentfunc 0 NonForking
+           forkIO $ do childfunc 0 NonForking
+                       hPutStr hwriter (func incontents)
                        hClose hwriter
                        putMVar mv (Exited ExitSuccess)
            return [(show func, takeMVar mv)]
@@ -119,7 +125,7 @@ instance ShellCommand ([Char], [[Char]]) where
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork: " ++ show x
-           retval <- parentfunc $! pid
+           retval <- parentfunc $! pid $! Forking
            return $ seq retval retval
            return [(show (cmd, args), 
                    (getProcessStatus True False pid >>=
@@ -131,7 +137,7 @@ instance ShellCommand ([Char], [[Char]]) where
                                    closeFd fromfd
               childstuff = do redir fstdin stdInput
                               redir fstdout stdOutput
-                              childfunc
+                              childfunc Forking
                               debugM "HSH.Command.shell.fdInvoke" 
                                      ("Running: " ++ cmd ++ " " ++
                                       (show args))
@@ -145,15 +151,20 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
     fdInvoke (PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
         do (reader, writer) <- createPipe
            res1 <- fdInvoke cmd1 fstdin writer 
-                        (\pid -> parentfunc pid {- >> closeFd writer -} )
-                        (childfunc >> closeFd reader)
+                        (\pid -> parentfunc pid)
+                        (childfunc Pipe >> closeFd reader)
            res2 <- fdInvoke cmd2 reader fstdout 
-                        (\pid -> parentfunc pid) -- >> closeFd reader >> closeFd writer )
-                        (childfunc >> closeFd writer)
+                        (\pid -> parentfunc pid >> closeFd reader >> closeFd writer )
+                        (childfunc Pipe >> closeFd writer)
+           parentfunc Pipe
            closeFd reader
            closeFd writer
            return $ res1 ++ res2
-           
+        where res1parent pid Forking = closeFd writer
+              res1parent pid Pipe = mapM_ closeFd [reader, writer]
+              res1parent pid _ = return ()
+              res1client 
+              
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b

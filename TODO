@@ -9,3 +9,6 @@ debugging/logging options
 implement piping
 
 framework for direct copying between pipes
+
+child function arg needs to change to Forking/Nonforking/Pipe
+
