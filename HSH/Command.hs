@@ -38,6 +38,8 @@ import MissingH.IO
 or pipe in both directions.  All commands that can be run as shell
 commands must define these methods. 
 
+Any Handles passed in should be assumed to be closed by the functions in here.
+
 Minimum implementation is 'pipeBoth'. -}
 class (Show a) => ShellCommand a where
     
@@ -82,3 +84,18 @@ lines of output. -}
 instance ShellCommand ([String] -> [String]) where
     pipeBoth func inh outh = hLineInteract inh outh func
 
+{- | An instance of 'ShellCommand' for an external command.  The
+first String is the command to run, and the list of Strings represents the
+arguments to the program, if any. -}
+instance ShellComand (String, [String]) where
+    pipeBoth (cmd, args) inh outh =
+        do fdi <- handleToFd inh
+           fdo <- handleToFd outh
+           pOpen3 (Just fdi) (Just fdo) Nothing cmd args (\_ -> return ())
+                  (return ())
+
+{- | Pipe the output of the first command into the input of the second. -}
+(-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> (a, b)
+
+{- | An instance of 'ShellCommand' to handle piping. -}
+       
