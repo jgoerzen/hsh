@@ -68,11 +68,6 @@ but what about when we don't fork?
 for the ones that don't fork, the items for 
  -}
 class (Show a) => ShellCommand a where
-{-
-    {- | Invoke a command, specifying stdin & stdout handles -}
-    hInvoke :: a -> Handle -> Handle -> IO ()
--}
-
     {- | Invoke a command. -}
     fdInvoke :: a               -- ^ The command
              -> Fd              -- ^ fd to pass to it as stdin
@@ -88,18 +83,11 @@ instance Show ([Char] -> [Char]) where
 String to String. -}
 instance ShellCommand ([Char] -> [Char]) where
     fdInvoke func fstdin fstdout _ _ =
-        do putStrLn "HI!"
-           putStrLn (show fstdin)
-           hreader <- fdToHandle fstdin
+        do hreader <- fdToHandle fstdin
            hwriter <- fdToHandle fstdout
            incontents <- hGetContents hreader
-           putStrLn "Before forkIO"
            mv <- newEmptyMVar
-           forkOS $ do
-                       putStrLn "After forkIO"
-                       putStrLn incontents
-                       putStrLn (show incontents)
-                       hPutStr hwriter (func "foo")
+           forkOS $ do hPutStr hwriter (func incontents)
                        hClose hwriter
                        putMVar mv (Exited ExitSuccess)
            return [(show func, takeMVar mv)]
@@ -125,9 +113,7 @@ first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand ([Char], [[Char]]) where
     fdInvoke (cmd, args) fstdin fstdout parentfunc childfunc = 
-        do pOpen3 (Just fstdin) (Just fstdout) Nothing
-               cmd args parentfunc childfunc
-           debugM "HSH.Command.shell.fdInvoke" "Before fork"
+        do debugM "HSH.Command.shell.fdInvoke" "Before fork"
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
