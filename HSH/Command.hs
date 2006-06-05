@@ -30,9 +30,12 @@ Copyright (c) 2006 John Goerzen, jgoerzen\@complete.org
 
 module HSH.Command ( ) where
 
-import MissingH.Cmd
+import MissingH.Cmd hiding (pipeBoth)
 import MissingH.IO.HVIO
 import MissingH.IO
+import Control.Concurrent
+import System.IO
+import System.Posix.IO
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
@@ -49,10 +52,12 @@ but what about when we don't fork?
 for the ones that don't fork, the items for 
  -}
 class (Show a) => ShellCommand a where
-    
+
     {- | Invoke a command, letting it receive input from standard in
        and send output to standard out, as usual. -}
     invoke :: a -> IO ()
+
+{-
 
     {- | Invoke a command, letting it receive input from standard in
        but directing its output to the designated handle. -}
@@ -61,24 +66,50 @@ class (Show a) => ShellCommand a where
     {- | Invoke a command, letting its output go to stdout,
        but receiving its input on the designated handle. -}
     pipeTo :: a -> Handle -> IO ()
-
-    {- | Invoke a command, giving both a standard in and a standard
-       out handle. -}
+-}
+    {- | Invoke a command.  Returns an action to evaluate to check on
+       completion, a standard in, and a standard out handle. -}
     pipeBoth :: a 
-             -> Handle          -- ^ Input is provided to the command here
-             -> Handle          -- ^ Output is received from the command here
-             -> IO ()
+             -> IO (IO (), Handle, Handle)
 
+{-
     -- | Default invoke -- stdin and stdout
-    invoke a = pipeBoth a stdin stdout
+    invoke a = pipeFrom a stdin
 
     pipeFrom a h = pipeBoth a stdin h
     pipeTo a h = pipeBoth a h stdout
-    
+  
+-}
+
+    invoke cmd = 
+        do (_, cstdin, cstdout) <- pipeBoth cmd
+           forkIO (hCopy stdin cstdin >> hClose cstdin)
+           forkIO (hCopy stdout cstdout >> hClose cstdout)
+           return ()
+
+instance Show (String -> String) where
+    show _ = "(String -> String)"
+  
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String. -}
 instance ShellCommand (String -> String) where
-    pipeBoth func inh outh = hInteract inh outh func
+    pipeBoth func =
+        do (inreaderfd, inwriterfd) <- createPipe
+           (outreaderfd, outwriterfd) <- createPipe
+           inwriterh <- fdToHandle inwriterfd -- to return 
+           outreaderh <- fdToHandle outreaderfd -- to return
+           
+           inreaderh <- fdToHandle inreaderfd -- internal use
+           outwriterh <- fdToHandle outwriterfd -- internal use
+
+           forkIO $ do incontents <- hGetContents inreaderh
+                       let r = func incontents
+                       hPutStr outwriterh r
+                       hClose outwriterh
+           return (fail "FIXME: error checking", inwriterh, outreaderh) 
+
+instance Show ([String] -> [String]) where
+    show _ = "([String] -> [String])"
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 [String] to [String].
@@ -89,18 +120,27 @@ reverse occurs via 'unlines'.
 So, this function is intended to operate upon lines of input and produce
 lines of output. -}
 instance ShellCommand ([String] -> [String]) where
-    pipeBoth func inh outh = hLineInteract inh outh func
+    pipeBoth func = pipeBoth (unlines . func . lines)
 
 {- | An instance of 'ShellCommand' for an external command.  The
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
-instance ShellComand (String, [String]) where
-    pipeBoth (cmd, args) inh outh =
-        do fdi <- handleToFd inh
-           fdo <- handleToFd outh
-           pOpen3 (Just fdi) (Just fdo) Nothing cmd args (\_ -> return ())
-                  (return ())
+instance ShellCommand (String, [String]) where
+    pipeBoth (cmd, args) =
+        do (ph, inh, outh) <- hPipeBoth cmd args
+           return (fail "error checking", inh, outh)
+
+
+{- | An instance of 'ShellCommand' represeting a pipeline. -}
+instance (ShellCommand a, ShellCommand b) => ShellCommand (a, b) where
+    pipeBoth (cmd1, cmd2) = 
+        do (_, cmd1stdin, cmd1stdout) <- pipeBoth cmd1
+           (_, cmd2stdin, cmd2stdout) <- pipeBoth cmd2
+           -- FIXME: connect them directly
+           forkIO (hCopy cmd1stdout cmd2stdin >> hClose cmd2stdin)
+           return (fail "Error handling", cmd1stdin, cmd2stdout)
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> (a, b)
+(-|-) cmd1 cmd2 = (cmd1, cmd2)
 
