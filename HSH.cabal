@@ -1,0 +1,18 @@
+Name: HSH
+Version: 0.1.0
+License: GPL
+Maintainer: John Goerzen <jgoerzen@complete.org>
+Stability: Alpha
+Copyright: Copyright (c) 2006 John Goerzen
+Exposed-Modules: HSH.Command
+Extensions: ExistentialQuantification, AllowOverlappingInstances,
+    AllowUndecidableInstances
+Build-Depends: base, unix, haskell98, mtl, HUnit, MissingH>=0.14.2
+GHC-Options: -O2
+
+Executable: runtests
+Buildable: True
+Main-Is: runtests.hs
+HS-Source-Dir: testsrc
+Extensions: ExistentialQuantification, AllowOverlappingInstances,
+    AllowUndecidableInstances, CPP
