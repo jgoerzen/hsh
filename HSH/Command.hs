@@ -97,5 +97,3 @@ instance ShellComand (String, [String]) where
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> (a, b)
 
-{- | An instance of 'ShellCommand' to handle piping. -}
-       
