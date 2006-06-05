@@ -88,7 +88,7 @@ instance ShellCommand ([Char] -> [Char]) where
            hwriter <- fdToHandle fstdout
            incontents <- hGetContents hreader
            mv <- newEmptyMVar
-           forkOS $ do hPutStr hwriter (func incontents)
+           forkIO $ do hPutStr hwriter (func incontents)
                        hClose hwriter
                        putMVar mv (Exited ExitSuccess)
            return [(show func, takeMVar mv)]
@@ -145,11 +145,13 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
     fdInvoke (PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
         do (reader, writer) <- createPipe
            res1 <- fdInvoke cmd1 fstdin writer 
-                        (\pid -> parentfunc pid >> closeFd writer)
+                        (\pid -> parentfunc pid {- >> closeFd writer -} )
                         (childfunc >> closeFd reader)
            res2 <- fdInvoke cmd2 reader fstdout 
-                        (\pid -> parentfunc pid >> closeFd reader)
+                        (\pid -> parentfunc pid) -- >> closeFd reader >> closeFd writer )
                         (childfunc >> closeFd writer)
+           closeFd reader
+           closeFd writer
            return $ res1 ++ res2
            
 
