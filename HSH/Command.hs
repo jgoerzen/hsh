@@ -35,6 +35,7 @@ import MissingH.IO.HVIO
 import MissingH.IO
 import Control.Concurrent
 import System.IO
+import System.Posix.Types
 import System.Posix.IO
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
@@ -43,7 +44,7 @@ commands must define these methods.
 
 Any Handles passed in should be assumed to be closed by the functions in here.
 
-Minimum implementation is 'pipeBoth'.
+Minimum implementation is 'fdInvoke'.
 
 ALL THESE ARE GOING TO NEED TWO NEW ITEMS: one for parent and one for child...
 
@@ -52,40 +53,25 @@ but what about when we don't fork?
 for the ones that don't fork, the items for 
  -}
 class (Show a) => ShellCommand a where
-
-    {- | Invoke a command, letting it receive input from standard in
-       and send output to standard out, as usual. -}
-    invoke :: a -> IO ()
-
 {-
-
-    {- | Invoke a command, letting it receive input from standard in
-       but directing its output to the designated handle. -}
-    pipeFrom :: a -> Handle -> IO ()
-
-    {- | Invoke a command, letting its output go to stdout,
-       but receiving its input on the designated handle. -}
-    pipeTo :: a -> Handle -> IO ()
--}
-    {- | Invoke a command.  Returns an action to evaluate to check on
-       completion, a standard in, and a standard out handle. -}
-    pipeBoth :: a 
-             -> IO (IO (), Handle, Handle)
-
-{-
-    -- | Default invoke -- stdin and stdout
-    invoke a = pipeFrom a stdin
-
-    pipeFrom a h = pipeBoth a stdin h
-    pipeTo a h = pipeBoth a h stdout
-  
+    {- | Invoke a command, specifying stdin & stdout handles -}
+    hInvoke :: a -> Handle -> Handle -> IO ()
 -}
 
-    invoke cmd = 
-        do (_, cstdin, cstdout) <- pipeBoth cmd
-           forkIO (hCopy stdin cstdin >> hClose cstdin)
-           forkIO (hCopy stdout cstdout >> hClose cstdout)
-           return ()
+    {- | Invoke a command. -}
+    fdInvoke :: a               -- ^ The command
+             -> Fd              -- ^ fd to pass to it as stdin
+             -> Fd              -- ^ fd to pass to it as stdout
+             -> (ProcessID -> IO ()) -- ^ If this invocation forks, action to run post-fork in parent.  Ignored if invocation doesn't fork.
+             -> IO ()           -- ^ If this invocation forks, action to run post-fork in client.  Ignored if invocation doesn't fork.
+             -> IO ()
+
+{-
+    hInvoke cmd h0 h1 = 
+        do fd0 <- handleToFd h0
+           fd1 <- handleToF2 h1
+           fdInvoke cmd fd0 fd1
+-}
 
 instance Show (String -> String) where
     show _ = "(String -> String)"
@@ -93,20 +79,13 @@ instance Show (String -> String) where
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String. -}
 instance ShellCommand (String -> String) where
-    pipeBoth func =
-        do (inreaderfd, inwriterfd) <- createPipe
-           (outreaderfd, outwriterfd) <- createPipe
-           inwriterh <- fdToHandle inwriterfd -- to return 
-           outreaderh <- fdToHandle outreaderfd -- to return
-           
-           inreaderh <- fdToHandle inreaderfd -- internal use
-           outwriterh <- fdToHandle outwriterfd -- internal use
-
-           forkIO $ do incontents <- hGetContents inreaderh
-                       let r = func incontents
-                       hPutStr outwriterh r
-                       hClose outwriterh
-           return (fail "FIXME: error checking", inwriterh, outreaderh) 
+    fdInvoke func fstdin fstdout _ _ =
+        do hreader <- fdToHandle fstdin
+           hwriter <- fdToHandle fstdout
+           forkIO $ do incontents <- hGetContents hreader
+                       hPutStr hwriter (func incontents)
+                       hClose hwriter
+           return ()
 
 instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
@@ -119,28 +98,34 @@ reverse occurs via 'unlines'.
 
 So, this function is intended to operate upon lines of input and produce
 lines of output. -}
+
 instance ShellCommand ([String] -> [String]) where
-    pipeBoth func = pipeBoth (unlines . func . lines)
+    fdInvoke func = fdInvoke (unlines . func . lines)
+
 
 {- | An instance of 'ShellCommand' for an external command.  The
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand (String, [String]) where
-    pipeBoth (cmd, args) =
-        do (ph, inh, outh) <- hPipeBoth cmd args
-           return (fail "error checking", inh, outh)
+    fdInvoke (cmd, args) fstdin fstdout parentfunc childfunc = 
+        pOpen3 (Just fstdin) (Just fstdout) Nothing
+               cmd args parentfunc childfunc
 
+data (ShellCommand a, ShellCommand b) => PipeCmd a b = PipeCmd a b
+   deriving Show
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
-instance (ShellCommand a, ShellCommand b) => ShellCommand (a, b) where
-    pipeBoth (cmd1, cmd2) = 
-        do (_, cmd1stdin, cmd1stdout) <- pipeBoth cmd1
-           (_, cmd2stdin, cmd2stdout) <- pipeBoth cmd2
-           -- FIXME: connect them directly
-           forkIO (hCopy cmd1stdout cmd2stdin >> hClose cmd2stdin)
-           return (fail "Error handling", cmd1stdin, cmd2stdout)
+instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCmd a b) where
+    fdInvoke (PipeCmd cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
+        do (reader, writer) <- createPipe
+           fdInvoke cmd1 fstdin writer 
+                        (\pid -> parentfunc pid >> closeFd writer)
+                        (childfunc >> closeFd reader)
+           fdInvoke cmd2 reader fstdout 
+                        (\pid -> parentfunc pid >> closeFd reader)
+                        (childfunc >> closeFd writer)
 
 {- | Pipe the output of the first command into the input of the second. -}
-(-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> (a, b)
-(-|-) cmd1 cmd2 = (cmd1, cmd2)
+(-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCmd a b
+(-|-) = PipeCmd 
 
