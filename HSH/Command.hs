@@ -41,12 +41,17 @@ import MissingH.IO
 import Control.Concurrent
 import Control.Concurrent.MVar
 import System.IO
-import System.IO.Error
+import System.Exit
 import System.Posix.Types
 import System.Posix.IO
+import System.Posix.Process
+import MissingH.Logging.Logger
+import System.IO.Error
+import MissingH.Maybe
+import Data.Maybe
 
 {- | Result type for shell commands -}
-type InvokeResult = (String, IO ExitCode)
+type InvokeResult = (String, IO ProcessStatus)
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
@@ -96,7 +101,8 @@ instance ShellCommand ([Char] -> [Char]) where
                        putStrLn (show incontents)
                        hPutStr hwriter (func "foo")
                        hClose hwriter
-           return (takeMVar mv)
+                       putMVar mv (Exited ExitSuccess)
+           return [(show func, takeMVar mv)]
 
 instance Show ([[Char]] -> [[Char]]) where
     show _ = "([String] -> [String])"
@@ -119,8 +125,28 @@ first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand ([Char], [[Char]]) where
     fdInvoke (cmd, args) fstdin fstdout parentfunc childfunc = 
-        pOpen3 (Just fstdin) (Just fstdout) Nothing
+        do pOpen3 (Just fstdin) (Just fstdout) Nothing
                cmd args parentfunc childfunc
+           debugM "HSH.Command.shell.fdInvoke" "Before fork"
+           p <- try (forkProcess childstuff)
+           pid <- case p of
+                    Right x -> return x
+                    Left x -> fail $ "Error in fork: " ++ show x
+           retval <- parentfunc $! pid
+           return $ seq retval retval
+           return [(show (cmd, args), 
+                   (getProcessStatus True False pid >>=
+                                        (return . forceMaybe)))]
+           
+        where redir fromfd tofd = do dupTo fromfd tofd
+                                     closeFd fromfd
+              childstuff = do redir fstdin stdInput
+                              redir fstdout stdOutput
+                              childfunc
+                              debugM "HSH.Command.shell.fdInvoke" 
+                                     ("Running: " ++ cmd ++ " " ++
+                                      (show args))
+                              executeFile cmd True args Nothing
 
 data (ShellCommand a, ShellCommand b) => PipeCmd a b = PipeCmd a b
    deriving Show
@@ -132,10 +158,10 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCmd a b) where
            res1 <- fdInvoke cmd1 fstdin writer 
                         (\pid -> parentfunc pid >> closeFd writer)
                         (childfunc >> closeFd reader)
-           res1 <- fdInvoke cmd2 reader fstdout 
+           res2 <- fdInvoke cmd2 reader fstdout 
                         (\pid -> parentfunc pid >> closeFd reader)
                         (childfunc >> closeFd writer)
-           return [res1, res2]
+           return $ res1 ++ res2
            
 
 {- | Pipe the output of the first command into the input of the second. -}
@@ -153,7 +179,7 @@ nullChildFunc = return ()
 {- | Runs, with input from stdin and output to stdout. -}
 run :: ShellCommand a => a -> IO ()
 run cmd = 
-    do r <- fdInvoke cmd stdInput stdOutput 
+    do r <- fdInvoke cmd stdInput stdOutput  nullParentFunc nullChildFunc
        checkResults r
        
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
@@ -163,8 +189,13 @@ checkResults r =
        case catMaybes rc of
          [] -> return ()
          x -> fail (unlines x)
-    where procresult (cmd, action) = 
+    where procresult :: InvokeResult -> IO (Maybe String)
+          procresult (cmd, action) = 
               do rc <- action
-                 case rc of
-                   ExitSuccess -> Nothing
-                   ExitFailure x -> Just $ cmd ++ ": exited with code " ++ show x
+                 return $ case rc of
+                   Exited (ExitSuccess) -> Nothing
+                   Exited (ExitFailure x) -> Just $ cmd ++ ": exited with code " ++ show x
+                   Terminated sig -> 
+                       Just $ cmd ++ ": Terminated by signal " ++ show sig
+                   Stopped sig ->
+                       Just $ cmd ++ ": Stopped by signal " ++ show sig
