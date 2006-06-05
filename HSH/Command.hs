@@ -28,7 +28,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 Copyright (c) 2006 John Goerzen, jgoerzen\@complete.org
 -}
 
-module HSH.Command ( ) where
+module HSH.Command (ShellCommand(..),
+                    PipeCmd(..),
+                    (-|-)
+                   ) where
 
 import MissingH.Cmd hiding (pipeBoth)
 import MissingH.IO.HVIO
@@ -73,21 +76,30 @@ class (Show a) => ShellCommand a where
            fdInvoke cmd fd0 fd1
 -}
 
-instance Show (String -> String) where
+instance Show ([Char] -> [Char]) where
     show _ = "(String -> String)"
   
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String. -}
-instance ShellCommand (String -> String) where
+instance ShellCommand ([Char] -> [Char]) where
     fdInvoke func fstdin fstdout _ _ =
-        do hreader <- fdToHandle fstdin
+        do putStrLn "HI!"
+           putStrLn (show fstdin)
+           hreader <- fdToHandle fstdin
            hwriter <- fdToHandle fstdout
-           forkIO $ do incontents <- hGetContents hreader
-                       hPutStr hwriter (func incontents)
-                       hClose hwriter
+           incontents <- hGetContents hreader
+           putStrLn "Before forkIO"
+           forkOS $ do
+                       putStrLn "After forkIO"
+                       putStrLn incontents
+                       putStrLn (show incontents)
+                       hPutStr hwriter (func "foo")
+                       --hClose hwriter
+                       threadDelay 50000
+           threadDelay 10000000
            return ()
 
-instance Show ([String] -> [String]) where
+instance Show ([[Char]] -> [[Char]]) where
     show _ = "([String] -> [String])"
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
@@ -99,14 +111,14 @@ reverse occurs via 'unlines'.
 So, this function is intended to operate upon lines of input and produce
 lines of output. -}
 
-instance ShellCommand ([String] -> [String]) where
+instance ShellCommand ([[Char]] -> [[Char]]) where
     fdInvoke func = fdInvoke (unlines . func . lines)
 
 
 {- | An instance of 'ShellCommand' for an external command.  The
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
-instance ShellCommand (String, [String]) where
+instance ShellCommand ([Char], [[Char]]) where
     fdInvoke (cmd, args) fstdin fstdout parentfunc childfunc = 
         pOpen3 (Just fstdin) (Just fstdout) Nothing
                cmd args parentfunc childfunc
