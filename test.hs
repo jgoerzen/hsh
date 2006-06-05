@@ -11,9 +11,8 @@ main2 = do fdInvoke ("ls", []::[[Char]]) stdInput stdOutput (\_ -> return ()) (r
 
 main = 
     do s <- openlog "SyslogStuff" [PID] USER DEBUG
-       updateGlobalLogger rootLoggerName (addHandler s . setLevel DEBUG)
+       --updateGlobalLogger rootLoggerName (addHandler s . setLevel DEBUG)
        debugM "MissingH.Cmd" "Test"
-       run ("ls", ["-l"])
-       run (zipWith (\i l -> show i ++ ": " ++ l) [1..])
+       run $ ("ls", ["-l"]) -|-  (zipWith (\i l -> show i ++ ": " ++ l) [1..])
        -- fdInvoke ("ls", []::[[Char]]) stdInput stdOutput (\_ -> return ()) (return ())
 
