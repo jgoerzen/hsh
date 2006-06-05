@@ -30,17 +30,23 @@ Copyright (c) 2006 John Goerzen, jgoerzen\@complete.org
 
 module HSH.Command (ShellCommand(..),
                     PipeCmd(..),
-                    (-|-)
+                    (-|-),
+                    run,
+                    InvokeResult
                    ) where
 
 import MissingH.Cmd hiding (pipeBoth)
 import MissingH.IO.HVIO
 import MissingH.IO
 import Control.Concurrent
+import Control.Concurrent.MVar
 import System.IO
 import System.IO.Error
 import System.Posix.Types
 import System.Posix.IO
+
+{- | Result type for shell commands -}
+type InvokeResult = (String, IO ExitCode)
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
@@ -68,14 +74,7 @@ class (Show a) => ShellCommand a where
              -> Fd              -- ^ fd to pass to it as stdout
              -> (ProcessID -> IO ()) -- ^ If this invocation forks, action to run post-fork in parent.  Ignored if invocation doesn't fork.
              -> IO ()           -- ^ If this invocation forks, action to run post-fork in client.  Ignored if invocation doesn't fork.
-             -> IO (IO ExitCode)           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
-
-{-
-    hInvoke cmd h0 h1 = 
-        do fd0 <- handleToFd h0
-           fd1 <- handleToF2 h1
-           fdInvoke cmd fd0 fd1
--}
+             -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show ([Char] -> [Char]) where
     show _ = "(String -> String)"
@@ -90,15 +89,14 @@ instance ShellCommand ([Char] -> [Char]) where
            hwriter <- fdToHandle fstdout
            incontents <- hGetContents hreader
            putStrLn "Before forkIO"
+           mv <- newEmptyMVar
            forkOS $ do
                        putStrLn "After forkIO"
                        putStrLn incontents
                        putStrLn (show incontents)
                        hPutStr hwriter (func "foo")
-                       --hClose hwriter
-                       threadDelay 50000
-           threadDelay 10000000
-           return ()
+                       hClose hwriter
+           return (takeMVar mv)
 
 instance Show ([[Char]] -> [[Char]]) where
     show _ = "([String] -> [String])"
@@ -131,12 +129,14 @@ data (ShellCommand a, ShellCommand b) => PipeCmd a b = PipeCmd a b
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCmd a b) where
     fdInvoke (PipeCmd cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
         do (reader, writer) <- createPipe
-           fdInvoke cmd1 fstdin writer 
+           res1 <- fdInvoke cmd1 fstdin writer 
                         (\pid -> parentfunc pid >> closeFd writer)
                         (childfunc >> closeFd reader)
-           fdInvoke cmd2 reader fstdout 
+           res1 <- fdInvoke cmd2 reader fstdout 
                         (\pid -> parentfunc pid >> closeFd reader)
                         (childfunc >> closeFd writer)
+           return [res1, res2]
+           
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCmd a b
@@ -151,5 +151,20 @@ nullChildFunc :: IO ()
 nullChildFunc = return ()
 
 {- | Runs, with input from stdin and output to stdout. -}
-run :: ShellCommand a => a -> IO Exitcode
-run cmd =  fdInvoke cmd stdInput stdOutput 
+run :: ShellCommand a => a -> IO ()
+run cmd = 
+    do r <- fdInvoke cmd stdInput stdOutput 
+       checkResults r
+       
+{- | Evaluates result codes and raises an error for any bad ones it finds. -}
+checkResults :: [InvokeResult] -> IO ()
+checkResults r = 
+    do rc <- mapM procresult r
+       case catMaybes rc of
+         [] -> return ()
+         x -> fail (unlines x)
+    where procresult (cmd, action) = 
+              do rc <- action
+                 case rc of
+                   ExitSuccess -> Nothing
+                   ExitFailure x -> Just $ cmd ++ ": exited with code " ++ show x
