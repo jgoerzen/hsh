@@ -38,6 +38,7 @@ import MissingH.IO.HVIO
 import MissingH.IO
 import Control.Concurrent
 import System.IO
+import System.IO.Error
 import System.Posix.Types
 import System.Posix.IO
 
@@ -67,7 +68,7 @@ class (Show a) => ShellCommand a where
              -> Fd              -- ^ fd to pass to it as stdout
              -> (ProcessID -> IO ()) -- ^ If this invocation forks, action to run post-fork in parent.  Ignored if invocation doesn't fork.
              -> IO ()           -- ^ If this invocation forks, action to run post-fork in client.  Ignored if invocation doesn't fork.
-             -> IO ()
+             -> IO (IO ExitCode)           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 {-
     hInvoke cmd h0 h1 = 
@@ -141,3 +142,14 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCmd a b) where
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCmd a b
 (-|-) = PipeCmd 
 
+{- | Function to use when there is nothing for the parent to do -}
+nullParentFunc :: ProcessID -> IO ()
+nullParentFunc = (\_ -> return ())
+
+{- | Function to use when there is nothing for the child to do -}
+nullChildFunc :: IO ()
+nullChildFunc = return ()
+
+{- | Runs, with input from stdin and output to stdout. -}
+run :: ShellCommand a => a -> IO Exitcode
+run cmd =  fdInvoke cmd stdInput stdOutput 
