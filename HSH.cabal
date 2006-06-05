@@ -4,7 +4,7 @@ License: GPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
 Stability: Alpha
 Copyright: Copyright (c) 2006 John Goerzen
-Exposed-Modules: HSH.Command
+Exposed-Modules: HSH, HSH.Command
 Extensions: ExistentialQuantification, AllowOverlappingInstances,
     AllowUndecidableInstances
 Build-Depends: base, unix, haskell98, mtl, HUnit, MissingH>=0.14.2

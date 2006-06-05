@@ -1,4 +1,5 @@
 {- Commands for HSH
+
 Copyright (C) 2006 John Goerzen <jgoerzen@complete.org>
 
 This program is free software; you can redistribute it and/or modify
@@ -29,7 +30,7 @@ Copyright (c) 2006 John Goerzen, jgoerzen\@complete.org
 -}
 
 module HSH.Command (ShellCommand(..),
-                    PipeCmd(..),
+                    PipeCommand(..),
                     (-|-),
                     run,
                     InvokeResult
@@ -136,12 +137,12 @@ instance ShellCommand ([Char], [[Char]]) where
                                       (show args))
                               executeFile cmd True args Nothing
 
-data (ShellCommand a, ShellCommand b) => PipeCmd a b = PipeCmd a b
+data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
    deriving Show
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
-instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCmd a b) where
-    fdInvoke (PipeCmd cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
+instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
+    fdInvoke (PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
         do (reader, writer) <- createPipe
            res1 <- fdInvoke cmd1 fstdin writer 
                         (\pid -> parentfunc pid >> closeFd writer)
@@ -153,8 +154,8 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCmd a b) where
            
 
 {- | Pipe the output of the first command into the input of the second. -}
-(-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCmd a b
-(-|-) = PipeCmd 
+(-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
+(-|-) = PipeCommand 
 
 {- | Function to use when there is nothing for the parent to do -}
 nullParentFunc :: ProcessID -> IO ()
