@@ -124,8 +124,10 @@ instance ShellCommand ([Char], [[Char]]) where
                    (getProcessStatus True False pid >>=
                                         (return . forceMaybe)))]
            
-        where redir fromfd tofd = do dupTo fromfd tofd
-                                     closeFd fromfd
+        where redir fromfd tofd 
+                  | fromfd == tofd = return ()
+                  | otherwise = do dupTo fromfd tofd
+                                   closeFd fromfd
               childstuff = do redir fstdin stdInput
                               redir fstdout stdOutput
                               childfunc
