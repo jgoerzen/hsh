@@ -39,8 +39,6 @@ module HSH.Command (ShellCommand(..),
 import MissingH.Cmd hiding (pipeBoth)
 import MissingH.IO.HVIO
 import MissingH.IO
-import Control.Concurrent
-import Control.Concurrent.MVar
 import System.IO
 import System.Exit
 import System.Posix.Types
@@ -57,7 +55,7 @@ d = debugM "HSH.Command"
 type InvokeResult = (String, IO ProcessStatus)
 
 {- | Type for functions. -}
-data InvokeType = Forking | NonForking | Pipe
+data InvokeType = Forking | Pipe
                 deriving (Eq, Show)
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
@@ -90,16 +88,24 @@ instance Show ([Char] -> [Char]) where
 String to String. -}
 instance ShellCommand ([Char] -> [Char]) where
     fdInvoke func fstdin fstdout parentfunc childfunc =
-        do hreader <- fdToHandle fstdin
-           hwriter <- fdToHandle fstdout
-           incontents <- hGetContents hreader
-           mv <- newEmptyMVar
-           parentfunc 0 NonForking
-           forkIO $ do childfunc NonForking
-                       hPutStr hwriter (func incontents)
-                       hClose hwriter
-                       putMVar mv (Exited ExitSuccess)
-           return [(show func, takeMVar mv)]
+        do d $ "Before fork for pure String->String func"
+           p <- try (forkProcess childstuff)
+           pid <- case p of
+                    Right x -> return x
+                    Left x -> fail $ "Error in fork for func: " ++ show x
+           d $ "New func pid " ++ show pid
+           retval <- (flip parentfunc) Forking $! pid
+           return $ seq retval retval
+           return [(show func,
+                   getProcessStatus True False pid >>=
+                                    (return . forceMaybe))]
+        where childstuff = do redir fstdin stdInput
+                              redir fstdout stdOutput
+                              childfunc Forking
+                              d $ "Running funcing in child"
+                              contents <- getContents
+                              putStr (func contents)
+                              d $ "Child exiting."
 
 instance Show ([[Char]] -> [[Char]]) where
     show _ = "([String] -> [String])"
@@ -131,18 +137,21 @@ instance ShellCommand ([Char], [[Char]]) where
            retval <- (flip parentfunc) Forking $! pid
            return $ seq retval retval
            return [(show (cmd, args), 
-                   (getProcessStatus True False pid >>=
-                                        (return . forceMaybe)))]
+                   getProcessStatus True False pid >>=
+                                        (return . forceMaybe))]
            
-        where redir fromfd tofd 
-                  | fromfd == tofd = return ()
-                  | otherwise = do dupTo fromfd tofd
-                                   closeFd fromfd
+        where 
               childstuff = do redir fstdin stdInput
                               redir fstdout stdOutput
                               childfunc Forking
                               d ("Running: " ++ cmd ++ " " ++ (show args))
                               executeFile cmd True args Nothing
+
+redir fromfd tofd 
+    | fromfd == tofd = return ()
+    | otherwise = do dupTo fromfd tofd
+                     closeFd fromfd
+
 
 data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
    deriving Show
@@ -177,9 +186,6 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
                      --closeFd writer
                      parentfunc pid Pipe
 
-              res1parent reader writer pid inv = 
-                  parentfunc pid inv
-
               res1child reader writer Forking = 
                   do d $ "res1child Forking: closing reader " ++ show reader
                      closeFd reader
@@ -189,10 +195,8 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
               -- else's fork
               res1child reader writer Pipe = 
                   do d $ "res1child Pipe: closing " ++ show (reader, writer)
-                     mapM_ closeFd [reader, writer]
+                     --mapM_ closeFd [reader, writer]
                      childfunc Pipe
-
-              res1child reader writer inv = childfunc inv
 
               res2parent reader writer pid Forking = 
                   do d $ "res2parent Forking: closing " ++ show (reader, writer)
@@ -201,12 +205,9 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
 
               res2parent reader writer pid Pipe = 
                   do --d $ "res2parent Pipe: closing reader " ++ show reader
-                     --closeFd reader
+                     closeFd reader
                      parentfunc pid Pipe
                      
-              res2parent reader writer pid inv =
-                  parentfunc pid inv
-
               res2child reader writer Forking = 
                   do d $ "res2child Forking: closing writer " ++ show writer
                      closeFd writer
@@ -216,12 +217,6 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
                   do d $ "res2child Pipe: closing " ++ show (reader, writer)
                      mapM_ closeFd [reader, writer]
                      childfunc Pipe
-
-              res2child reader writer NonForking = 
-                  do d $ "res2child NonForking: closing writer " ++ show writer
-                     closeFd writer
-                     --childfunc Pipe
-              
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
