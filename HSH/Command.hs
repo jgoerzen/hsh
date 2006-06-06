@@ -54,10 +54,6 @@ d = debugM "HSH.Command"
 {- | Result type for shell commands -}
 type InvokeResult = (String, IO ProcessStatus)
 
-{- | Type for functions. -}
-data InvokeType = Forking | Pipe
-                deriving (Eq, Show)
-
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
 commands must define these methods. 
@@ -104,8 +100,6 @@ instance ShellCommand ([Char] -> [Char]) where
                               hw <- fdToHandle fstdout
                               hSetBuffering hw LineBuffering
                               d $ "Closing stdin, stdout"
-                              --hClose stdin
-                              --hClose stdout
                               childfunc
                               d $ "Running func in child"
                               contents <- hGetContents hr
@@ -222,16 +216,3 @@ checkResults r =
                    Stopped sig ->
                        Just $ cmd ++ ": Stopped by signal " ++ show sig
 
-{-
-
-WHAT SHOULD HAPPEN....
-
-simple pipe....
-
-  proc 1 child: close reader
-  proc 2 child: close writer
-  parent: close both
-
-pipe to a pipe...
-
--}
