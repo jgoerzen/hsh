@@ -93,7 +93,7 @@ instance ShellCommand ([Char] -> [Char]) where
            incontents <- hGetContents hreader
            mv <- newEmptyMVar
            parentfunc 0 NonForking
-           forkIO $ do childfunc 0 NonForking
+           forkIO $ do childfunc NonForking
                        hPutStr hwriter (func incontents)
                        hClose hwriter
                        putMVar mv (Exited ExitSuccess)
@@ -125,7 +125,7 @@ instance ShellCommand ([Char], [[Char]]) where
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork: " ++ show x
-           retval <- parentfunc $! pid $! Forking
+           retval <- (flip parentfunc) Forking $! pid
            return $ seq retval retval
            return [(show (cmd, args), 
                    (getProcessStatus True False pid >>=
@@ -151,19 +151,62 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
     fdInvoke (PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
         do (reader, writer) <- createPipe
            res1 <- fdInvoke cmd1 fstdin writer 
-                        (\pid -> parentfunc pid)
-                        (childfunc Pipe >> closeFd reader)
+                   (res1parent reader writer)
+                   (res1child reader writer)
            res2 <- fdInvoke cmd2 reader fstdout 
-                        (\pid -> parentfunc pid >> closeFd reader >> closeFd writer )
-                        (childfunc Pipe >> closeFd writer)
-           parentfunc Pipe
-           closeFd reader
-           closeFd writer
+                   (res2parent reader writer)
+                   (res2child reader writer)
+           parentfunc 0 Pipe
            return $ res1 ++ res2
-        where res1parent pid Forking = closeFd writer
-              res1parent pid Pipe = mapM_ closeFd [reader, writer]
-              res1parent pid _ = return ()
-              res1client 
+        where 
+          -- If it's forking, close the writer, then call other parents
+          -- as pipes
+              res1parent reader writer pid Forking = 
+                  do closeFd writer 
+                     parentfunc pid Pipe
+
+              res1parent reader writer pid Pipe = 
+{-
+                  do mapM_ closeFd [reader, writer]
+                     parentfunc pid Pipe
+-}
+
+              res1parent reader writer pid inv = 
+                  parentfunc pid inv
+
+              res1child reader writer Forking = 
+                  do closeFd reader
+                     childfunc Pipe
+
+              res1child reader writer Pipe = return ()
+{-
+                  do res1parent reader writer 0 Pipe
+                     childfunc Pipe
+-}
+
+              res1child reader writer inv = childfunc inv
+
+              res2parent reader writer pid Forking = 
+                  do closeFd reader
+                     parentfunc pid Pipe
+
+              res2parent reader writer pid Pipe = return ()
+--                  res1parent reader writer pid Pipe
+                     
+              res2parent reader writer pid inv =
+                  parentfunc pid inv
+
+              res2child reader writer Forking = 
+                  do closeFd writer
+                     childfunc Pipe
+
+              res2child reader writer Pipe = return ()
+{-
+                  do closeFd writer
+                     childfunc Pipe
+-}
+
+              res2child reader writer inv = childfunc inv
               
 
 {- | Pipe the output of the first command into the input of the second. -}
@@ -171,17 +214,17 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
 (-|-) = PipeCommand 
 
 {- | Function to use when there is nothing for the parent to do -}
-nullParentFunc :: ProcessID -> IO ()
-nullParentFunc = (\_ -> return ())
+nullParentFunc :: ProcessID -> InvokeType -> IO ()
+nullParentFunc _ _ = return ()
 
 {- | Function to use when there is nothing for the child to do -}
-nullChildFunc :: IO ()
-nullChildFunc = return ()
+nullChildFunc :: InvokeType -> IO ()
+nullChildFunc _ = return ()
 
 {- | Runs, with input from stdin and output to stdout. -}
 run :: ShellCommand a => a -> IO ()
 run cmd = 
-    do r <- fdInvoke cmd stdInput stdOutput  nullParentFunc nullChildFunc
+    do r <- fdInvoke cmd stdInput stdOutput nullParentFunc nullChildFunc
        checkResults r
        
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
