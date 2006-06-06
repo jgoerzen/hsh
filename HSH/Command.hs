@@ -51,6 +51,8 @@ import System.IO.Error
 import MissingH.Maybe
 import Data.Maybe
 
+d = debugM "HSH.Command"
+
 {- | Result type for shell commands -}
 type InvokeResult = (String, IO ProcessStatus)
 
@@ -120,7 +122,7 @@ first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand ([Char], [[Char]]) where
     fdInvoke (cmd, args) fstdin fstdout parentfunc childfunc = 
-        do debugM "HSH.Command.shell.fdInvoke" "Before fork"
+        do d "Before fork"
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
@@ -138,9 +140,7 @@ instance ShellCommand ([Char], [[Char]]) where
               childstuff = do redir fstdin stdInput
                               redir fstdout stdOutput
                               childfunc Forking
-                              debugM "HSH.Command.shell.fdInvoke" 
-                                     ("Running: " ++ cmd ++ " " ++
-                                      (show args))
+                              d ("Running: " ++ cmd ++ " " ++ (show args))
                               executeFile cmd True args Nothing
 
 data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
@@ -149,7 +149,9 @@ data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
     fdInvoke (PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
-        do (reader, writer) <- createPipe
+        do d $ "Handling pipe: " ++ show (PipeCommand cmd1 cmd2)
+           (reader, writer) <- createPipe
+           d $ "New pipe endpoints: " ++ show (reader, writer)
            res1 <- fdInvoke cmd1 fstdin writer 
                    (res1parent reader writer)
                    (res1child reader writer)
@@ -160,51 +162,58 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
            return $ res1 ++ res2
         where 
           -- If it's forking, close the writer, then call other parents
-          -- as pipes
+          -- as pipes.
               res1parent reader writer pid Forking = 
-                  do closeFd writer 
+                  do d $ "res1parent Forking: closing writer " ++ show writer
+                     closeFd writer 
                      parentfunc pid Pipe
-
+                                
+              -- If we're called as a pipe, it means somebody else forked
+              -- and is passing the message along.  Close things up.
               res1parent reader writer pid Pipe = 
-{-
-                  do mapM_ closeFd [reader, writer]
+                  do d $ "res1parent Pipe: closing writer " ++ show writer
+                     closeFd writer
                      parentfunc pid Pipe
--}
 
               res1parent reader writer pid inv = 
                   parentfunc pid inv
 
               res1child reader writer Forking = 
-                  do closeFd reader
+                  do d $ "res1child Forking: closing reader " ++ show reader
+                     closeFd reader
                      childfunc Pipe
 
-              res1child reader writer Pipe = return ()
-{-
-                  do res1parent reader writer 0 Pipe
+              -- In the child, close both if we're called after someone
+              -- else's fork
+              res1child reader writer Pipe = 
+                  do d $ "res1child Pipe: closing " ++ show (reader, writer)
+                     mapM_ closeFd [reader, writer]
                      childfunc Pipe
--}
 
               res1child reader writer inv = childfunc inv
 
               res2parent reader writer pid Forking = 
-                  do closeFd reader
+                  do d $ "res2parent Forking: closing reader " ++ show reader
+                     closeFd reader
                      parentfunc pid Pipe
 
-              res2parent reader writer pid Pipe = return ()
---                  res1parent reader writer pid Pipe
+              res2parent reader writer pid Pipe = 
+                  do d $ "res2parent Pipe: closing reader " ++ show reader
+                     closeFd reader
+                     parentfunc pid Pipe
                      
               res2parent reader writer pid inv =
                   parentfunc pid inv
 
               res2child reader writer Forking = 
-                  do closeFd writer
+                  do d $ "res2child Forking: closing writer " ++ show writer
+                     closeFd writer
                      childfunc Pipe
 
-              res2child reader writer Pipe = return ()
-{-
-                  do closeFd writer
+              res2child reader writer Pipe = 
+                  do d $ "res2child Pipe: closing " ++ show (reader, writer)
+                     mapM_ closeFd [reader, writer]
                      childfunc Pipe
--}
 
               res2child reader writer inv = childfunc inv
               
