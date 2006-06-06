@@ -104,8 +104,8 @@ instance ShellCommand ([Char] -> [Char]) where
                               hw <- fdToHandle fstdout
                               hSetBuffering hw LineBuffering
                               d $ "Closing stdin, stdout"
-                              hClose stdin
-                              hClose stdout
+                              --hClose stdin
+                              --hClose stdout
                               childfunc
                               d $ "Running func in child"
                               contents <- hGetContents hr
