@@ -58,16 +58,8 @@ type InvokeResult = (String, IO ProcessStatus)
 or pipe in both directions.  All commands that can be run as shell
 commands must define these methods. 
 
-Any Handles passed in should be assumed to be closed by the functions in here.
-
 Minimum implementation is 'fdInvoke'.
-
-ALL THESE ARE GOING TO NEED TWO NEW ITEMS: one for parent and one for child...
-
-but what about when we don't fork?
-
-for the ones that don't fork, the items for 
- -}
+-}
 class (Show a) => ShellCommand a where
     {- | Invoke a command. -}
     fdInvoke :: a               -- ^ The command
