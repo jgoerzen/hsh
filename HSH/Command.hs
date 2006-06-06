@@ -77,12 +77,12 @@ class (Show a) => ShellCommand a where
              -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
-instance Show ([Char] -> [Char]) where
+instance Show (String -> String) where
     show _ = "(String -> String)"
   
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String. -}
-instance ShellCommand ([Char] -> [Char]) where
+instance ShellCommand (String -> String) where
     fdInvoke func fstdin fstdout subprocfunc childfunc =
         do d $ "Before fork for pure String->String func"
            p <- try (forkProcess childstuff)
@@ -109,7 +109,7 @@ instance ShellCommand ([Char] -> [Char]) where
                               hClose hw
                               d $ "Child exiting."
 
-instance Show ([[Char]] -> [[Char]]) where
+instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
@@ -121,14 +121,14 @@ reverse occurs via 'unlines'.
 So, this function is intended to operate upon lines of input and produce
 lines of output. -}
 
-instance ShellCommand ([[Char]] -> [[Char]]) where
+instance ShellCommand ([String] -> [String]) where
     fdInvoke func = fdInvoke (unlines . func . lines)
 
 
 {- | An instance of 'ShellCommand' for an external command.  The
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
-instance ShellCommand ([Char], [[Char]]) where
+instance ShellCommand (String, [String]) where
     fdInvoke pc@(cmd, args) fstdin fstdout subprocfunc childfunc = 
         do d $ "Before fork for " ++ show pc
            p <- try (forkProcess childstuff)
