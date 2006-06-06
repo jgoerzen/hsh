@@ -148,8 +148,8 @@ data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke (PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
-        do d $ "Handling pipe: " ++ show (PipeCommand cmd1 cmd2)
+    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
+        do d $ "*** Handling pipe: " ++ show pc
            (reader, writer) <- createPipe
            d $ "New pipe endpoints: " ++ show (reader, writer)
            res1 <- fdInvoke cmd1 fstdin writer 
@@ -159,20 +159,21 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
                    (res2parent reader writer)
                    (res2child reader writer)
            parentfunc 0 Pipe
+           d $ "*** Done handling pipe " ++ show pc
            return $ res1 ++ res2
         where 
           -- If it's forking, close the writer, then call other parents
           -- as pipes.
               res1parent reader writer pid Forking = 
-                  do d $ "res1parent Forking: closing writer " ++ show writer
-                     closeFd writer 
+                  do --d $ "res1parent Forking: closing writer " ++ show writer
+                     --closeFd writer 
                      parentfunc pid Pipe
                                 
               -- If we're called as a pipe, it means somebody else forked
               -- and is passing the message along.  Close things up.
               res1parent reader writer pid Pipe = 
-                  do d $ "res1parent Pipe: closing writer " ++ show writer
-                     closeFd writer
+                  do --d $ "res1parent Pipe: closing writer " ++ show writer
+                     --closeFd writer
                      parentfunc pid Pipe
 
               res1parent reader writer pid inv = 
@@ -193,13 +194,13 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
               res1child reader writer inv = childfunc inv
 
               res2parent reader writer pid Forking = 
-                  do d $ "res2parent Forking: closing reader " ++ show reader
-                     closeFd reader
+                  do d $ "res2parent Forking: closing " ++ show (reader, writer)
+                     mapM_ closeFd [reader, writer]
                      parentfunc pid Pipe
 
               res2parent reader writer pid Pipe = 
-                  do d $ "res2parent Pipe: closing reader " ++ show reader
-                     closeFd reader
+                  do --d $ "res2parent Pipe: closing reader " ++ show reader
+                     --closeFd reader
                      parentfunc pid Pipe
                      
               res2parent reader writer pid inv =
@@ -215,7 +216,10 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
                      mapM_ closeFd [reader, writer]
                      childfunc Pipe
 
-              res2child reader writer inv = childfunc inv
+              res2child reader writer NonForking = 
+                  do d $ "res2child NonForking: closing writer " ++ show writer
+                     closeFd writer
+                     --childfunc Pipe
               
 
 {- | Pipe the output of the first command into the input of the second. -}
