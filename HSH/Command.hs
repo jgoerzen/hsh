@@ -161,11 +161,15 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
            (reader, writer) <- createPipe
            d $ "New pipe endpoints: " ++ show (reader, writer)
            res1 <- fdInvoke cmd1 fstdin writer 
-                   (mapM_ closeFd [reader, writer])
-                   (closeFd reader >> subproc)
+                   ((d $ "res1sub closing r " ++ show reader) >> 
+                    mapM_ closeFd [reader])
+                   ((d $ "res1client closing r " ++ show reader) >> 
+                    closeFd reader >> subproc)
            res2 <- fdInvoke cmd2 reader fstdout 
-                   (mapM_ closeFd [reader, writer])
-                   (closeFd writer >> subproc)
+                   ((d $ "res2sub closing w " ++ show writer) >>
+                    mapM_ closeFd [writer])
+                   ((d $ "res2client closing w " ++ show writer) >> 
+                    closeFd writer >> subproc)
            mapM_ closeFd [reader, writer]
            
            d $ "*** Done handling pipe " ++ show pc
