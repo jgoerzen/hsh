@@ -71,12 +71,12 @@ class (Show a) => ShellCommand a where
 
 instance Show (String -> String) where
     show _ = "(String -> String)"
+instance Show (String -> IO String) where
+    show _ = "(String -> IO String)"
   
-{- | An instance of 'ShellCommand' for a pure Haskell function mapping
-String to String. -}
-instance ShellCommand (String -> String) where
+instance ShellCommand (String -> IO String) where
     fdInvoke func fstdin fstdout subprocfunc childfunc =
-        do d $ "Before fork for pure String->String func"
+        do d $ "Before fork for String->IO String func"
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
@@ -95,14 +95,26 @@ instance ShellCommand (String -> String) where
                               childfunc
                               d $ "Running func in child"
                               contents <- hGetContents hr
-                              hPutStr hw (func contents)
+                              result <- func contents
+                              hPutStr hw result
                               d $ "Func done, closing handles."
                               hClose hr
                               hClose hw
                               d $ "Child exiting."
 
+{- | An instance of 'ShellCommand' for a pure Haskell function mapping
+String to String.  Implement in terms of (String -> IO String) for
+simplicity. -}
+instance ShellCommand (String -> String) where
+    fdInvoke func fstdin fstdout subprocfunc childfunc =
+        fdInvoke iofunc fstdin fstdout subprocfunc childfunc
+            where iofunc :: String -> IO String
+                  iofunc = return . func
+
 instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
+instance Show ([String] -> IO [String]) where
+    show _ = "([String] -> IO [String])"
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 [String] to [String].
@@ -112,9 +124,14 @@ reverse occurs via 'unlines'.
 
 So, this function is intended to operate upon lines of input and produce
 lines of output. -}
-
 instance ShellCommand ([String] -> [String]) where
     fdInvoke func = fdInvoke (unlines . func . lines)
+
+{- | The same for an IO function -}
+instance ShellCommand ([String] -> IO [String]) where
+    fdInvoke func = fdInvoke iofunc
+        where iofunc input = do r <- func (lines input)
+                                return (unlines r)
 
 
 {- | An instance of 'ShellCommand' for an external command.  The

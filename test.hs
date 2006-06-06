@@ -6,9 +6,9 @@ import MissingH.Logging.Handler.Syslog
 main = 
  do s <- openlog "test" [PID] USER DEBUG
     updateGlobalLogger rootLoggerName (addHandler s . setLevel DEBUG)
-    run $ ("ls", ["-l"]) -|-  countLines -|- ("grep", ["hs$"])
+    --run $ ("ls", ["-l"]) -|-  countLines -|- ("grep", ["hs$"])
     --run $ (id::(String -> String)) -|- ("wc", ["-l"]) -|- countLines -|- ("grep", ["1"])
-    --run $ countLines -|- countLines
+    run $ countLines -|- countLines
     --run $ ("ls", ["-l"]) -|- ("wc", ["-l"])
 
 countLines :: [String] -> [String]
