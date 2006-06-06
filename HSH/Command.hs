@@ -98,12 +98,16 @@ instance ShellCommand ([Char] -> [Char]) where
            return [(show func,
                    getProcessStatus True False pid >>=
                                     (return . forceMaybe))]
-        where childstuff = do redir fstdin stdInput
-                              redir fstdout stdOutput
+        where childstuff = do hr <- fdToHandle fstdin
+                              hw <- fdToHandle fstdout
+                              hSetBuffering hw LineBuffering
                               childfunc
-                              d $ "Running funcing in child"
-                              contents <- getContents
-                              putStr (func contents)
+                              d $ "Running func in child"
+                              contents <- hGetContents hr
+                              hPutStr hw (func contents)
+                              d $ "Func done, closing handles."
+                              hClose hr
+                              hClose hw
                               d $ "Child exiting."
 
 instance Show ([[Char]] -> [[Char]]) where
@@ -146,8 +150,10 @@ instance ShellCommand ([Char], [[Char]]) where
                               executeFile cmd True args Nothing
 
 redir fromfd tofd 
-    | fromfd == tofd = return ()
-    | otherwise = do dupTo fromfd tofd
+    | fromfd == tofd = do d $ "ignoring identical redir " ++ show fromfd
+                          return ()
+    | otherwise = do d $ "running dupTo " ++ show (fromfd, tofd)
+                     dupTo fromfd tofd
                      closeFd fromfd
 
 
