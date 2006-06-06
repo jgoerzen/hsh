@@ -98,9 +98,14 @@ instance ShellCommand ([Char] -> [Char]) where
            return [(show func,
                    getProcessStatus True False pid >>=
                                     (return . forceMaybe))]
-        where childstuff = do hr <- fdToHandle fstdin
+        where childstuff = do d $ "Input is on " ++ show fstdin
+                              hr <- fdToHandle fstdin
+                              d $ "Output is on " ++ show fstdout
                               hw <- fdToHandle fstdout
                               hSetBuffering hw LineBuffering
+                              d $ "Closing stdin, stdout"
+                              hClose stdin
+                              hClose stdout
                               childfunc
                               d $ "Running func in child"
                               contents <- hGetContents hr
