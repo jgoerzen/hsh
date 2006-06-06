@@ -121,12 +121,13 @@ instance ShellCommand ([[Char]] -> [[Char]]) where
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand ([Char], [[Char]]) where
-    fdInvoke (cmd, args) fstdin fstdout parentfunc childfunc = 
-        do d "Before fork"
+    fdInvoke pc@(cmd, args) fstdin fstdout parentfunc childfunc = 
+        do d $ "Before fork for " ++ show pc
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork: " ++ show x
+           d $ "New pid " ++ show pid ++ " for " ++ show pc
            retval <- (flip parentfunc) Forking $! pid
            return $ seq retval retval
            return [(show (cmd, args), 
