@@ -77,8 +77,8 @@ class (Show a) => ShellCommand a where
     fdInvoke :: a               -- ^ The command
              -> Fd              -- ^ fd to pass to it as stdin
              -> Fd              -- ^ fd to pass to it as stdout
-             -> (ProcessID -> InvokeType -> IO ()) -- ^ Action to run post-fork in parent (or in main process if it doesn't fork; PID is 0 in these cases)
-             -> (InvokeType -> IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
+             -> (IO ()) -- ^ Action to run post-fork in the child, but only if this child is itself the child of a pipe.
+             -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show ([Char] -> [Char]) where
@@ -87,21 +87,20 @@ instance Show ([Char] -> [Char]) where
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String. -}
 instance ShellCommand ([Char] -> [Char]) where
-    fdInvoke func fstdin fstdout parentfunc childfunc =
+    fdInvoke func fstdin fstdout subprocfunc childfunc =
         do d $ "Before fork for pure String->String func"
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork for func: " ++ show x
            d $ "New func pid " ++ show pid
-           retval <- (flip parentfunc) Forking $! pid
-           return $ seq retval retval
+           return $ seq pid pid
            return [(show func,
                    getProcessStatus True False pid >>=
                                     (return . forceMaybe))]
         where childstuff = do redir fstdin stdInput
                               redir fstdout stdOutput
-                              childfunc Forking
+                              childfunc
                               d $ "Running funcing in child"
                               contents <- getContents
                               putStr (func contents)
@@ -127,15 +126,14 @@ instance ShellCommand ([[Char]] -> [[Char]]) where
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand ([Char], [[Char]]) where
-    fdInvoke pc@(cmd, args) fstdin fstdout parentfunc childfunc = 
+    fdInvoke pc@(cmd, args) fstdin fstdout subprocfunc childfunc = 
         do d $ "Before fork for " ++ show pc
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork: " ++ show x
            d $ "New pid " ++ show pid ++ " for " ++ show pc
-           retval <- (flip parentfunc) Forking $! pid
-           return $ seq retval retval
+           return $ seq pid pid
            return [(show (cmd, args), 
                    getProcessStatus True False pid >>=
                                         (return . forceMaybe))]
@@ -143,7 +141,7 @@ instance ShellCommand ([Char], [[Char]]) where
         where 
               childstuff = do redir fstdin stdInput
                               redir fstdout stdOutput
-                              childfunc Forking
+                              childfunc
                               d ("Running: " ++ cmd ++ " " ++ (show args))
                               executeFile cmd True args Nothing
 
@@ -158,77 +156,32 @@ data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout parentfunc childfunc = 
+    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout subproc forkfunc = 
         do d $ "*** Handling pipe: " ++ show pc
            (reader, writer) <- createPipe
            d $ "New pipe endpoints: " ++ show (reader, writer)
            res1 <- fdInvoke cmd1 fstdin writer 
-                   (res1parent reader writer)
-                   (res1child reader writer)
+                   (mapM_ closeFd [reader, writer])
+                   (closeFd reader >> subproc)
            res2 <- fdInvoke cmd2 reader fstdout 
-                   (res2parent reader writer)
-                   (res2child reader writer)
-           parentfunc 0 Pipe
+                   (mapM_ closeFd [reader, writer])
+                   (closeFd writer >> subproc)
+           mapM_ closeFd [reader, writer]
+           
            d $ "*** Done handling pipe " ++ show pc
            return $ res1 ++ res2
-        where 
-          -- If it's forking, close the writer, then call other parents
-          -- as pipes.
-              res1parent reader writer pid Forking = 
-                  do --d $ "res1parent Forking: closing writer " ++ show writer
-                     --closeFd writer 
-                     parentfunc pid Pipe
-                                
-              -- If we're called as a pipe, it means somebody else forked
-              -- and is passing the message along.  Close things up.
-              res1parent reader writer pid Pipe = 
-                  do --d $ "res1parent Pipe: closing writer " ++ show writer
-                     --closeFd writer
-                     parentfunc pid Pipe
-
-              res1child reader writer Forking = 
-                  do d $ "res1child Forking: closing reader " ++ show reader
-                     closeFd reader
-                     childfunc Pipe
-
-              -- In the child, close both if we're called after someone
-              -- else's fork
-              res1child reader writer Pipe = 
-                  do d $ "res1child Pipe: closing " ++ show (reader, writer)
-                     --mapM_ closeFd [reader, writer]
-                     childfunc Pipe
-
-              res2parent reader writer pid Forking = 
-                  do d $ "res2parent Forking: closing " ++ show (reader, writer)
-                     mapM_ closeFd [reader, writer]
-                     parentfunc pid Pipe
-
-              res2parent reader writer pid Pipe = 
-                  do --d $ "res2parent Pipe: closing reader " ++ show reader
-                     closeFd reader
-                     parentfunc pid Pipe
-                     
-              res2child reader writer Forking = 
-                  do d $ "res2child Forking: closing writer " ++ show writer
-                     closeFd writer
-                     childfunc Pipe
-
-              res2child reader writer Pipe = 
-                  do d $ "res2child Pipe: closing " ++ show (reader, writer)
-                     mapM_ closeFd [reader, writer]
-                     childfunc Pipe
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
 (-|-) = PipeCommand 
 
 {- | Function to use when there is nothing for the parent to do -}
-nullParentFunc :: ProcessID -> InvokeType -> IO ()
-nullParentFunc _ _ = return ()
+nullParentFunc :: IO ()
+nullParentFunc = return ()
 
 {- | Function to use when there is nothing for the child to do -}
-nullChildFunc :: InvokeType -> IO ()
-nullChildFunc _ = return ()
+nullChildFunc :: IO ()
+nullChildFunc = return ()
 
 {- | Runs, with input from stdin and output to stdout. -}
 run :: ShellCommand a => a -> IO ()
@@ -253,3 +206,17 @@ checkResults r =
                        Just $ cmd ++ ": Terminated by signal " ++ show sig
                    Stopped sig ->
                        Just $ cmd ++ ": Stopped by signal " ++ show sig
+
+{-
+
+WHAT SHOULD HAPPEN....
+
+simple pipe....
+
+  proc 1 child: close reader
+  proc 2 child: close writer
+  parent: close both
+
+pipe to a pipe...
+
+-}
