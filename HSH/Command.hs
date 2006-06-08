@@ -157,6 +157,12 @@ instance ShellCommand (String, [String]) where
                               d ("Running: " ++ cmd ++ " " ++ (show args))
                               executeFile cmd True args Nothing
 
+{- | An instance of 'ShellCommand' for an external command.  The
+String is split using words to the command to run, and the arguments, if any. -}
+instance ShellCommand String where
+    fdInvoke cmdline = fdInvoke (cmd,opts)
+    	where (cmd:opts) = words cmdline
+
 redir fromfd tofd 
     | fromfd == tofd = do d $ "ignoring identical redir " ++ show fromfd
                           return ()
