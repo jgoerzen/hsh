@@ -59,8 +59,9 @@ Note: buffering behavior here is untested.
 -}
 catFrom :: [FilePath] -> String -> IO String
 catFrom fplist inp =
-    foldM foldfunc "" fplist
-        where foldfunc accum fp =
+    do r <- foldM foldfunc "" fplist
+       return r
+    where foldfunc accum fp =
                   case fp of
                     "-" -> return (accum ++ inp)
                     fn -> do c <- readFile fn
@@ -109,5 +110,5 @@ egrepV pat = filter (not . ismatch regex)
 
 {- | Count number of lines.  wc -l -}
 wcL :: [String] -> [String]
-wcL inp = [show $  genericLength inp]
+wcL inp = [show $ genericLength inp]
 

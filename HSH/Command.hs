@@ -67,7 +67,7 @@ class (Show a) => ShellCommand a where
     fdInvoke :: a               -- ^ The command
              -> Fd              -- ^ fd to pass to it as stdin
              -> Fd              -- ^ fd to pass to it as stdout
-             -> (IO ()) -- ^ Action to run post-fork in the parent, but only if this child is itself the child of a pipe.
+             -> (IO ()) -- ^ Action to run post-fork in the child, but only if this child is itself the child of a pipe.
              -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
