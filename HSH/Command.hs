@@ -92,12 +92,14 @@ instance ShellCommand (String -> IO String) where
                               hr <- fdToHandle fstdin
                               d $ "Output is on " ++ show fstdout
                               hw <- fdToHandle fstdout
-                              hSetBuffering hw LineBuffering
+                              --hSetBuffering hw LineBuffering
                               d $ "Closing stdin, stdout"
                               childfunc
                               d $ "Running func in child"
                               contents <- hGetContents hr
+                              d $ "Contents read"
                               result <- func contents
+                              d $ "Func applied"
                               hPutStr hw result
                               d $ "Func done, closing handles."
                               hClose hr
@@ -183,17 +185,18 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
     fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout subproc forkfunc = 
         do d $ "*** Handling pipe: " ++ show pc
            (reader, writer) <- createPipe
-           d $ "New pipe endpoints: " ++ show (reader, writer)
+           d $ "pipd fdInvoke: New pipe endpoints: " ++ show (reader, writer)
            res1 <- fdInvoke cmd1 fstdin writer 
                    ((d $ "res1sub closing r " ++ show reader) >> 
                     mapM_ closeFd [reader])
                    ((d $ "res1client closing r " ++ show reader) >> 
-                    closeFd reader >> subproc)
+                    closeFd reader >> subproc >> forkfunc)
            res2 <- fdInvoke cmd2 reader fstdout 
                    ((d $ "res2sub closing w " ++ show writer) >>
                     mapM_ closeFd [writer])
                    ((d $ "res2client closing w " ++ show writer) >> 
-                    closeFd writer >> subproc)
+                    closeFd writer >> subproc >> forkfunc)
+           d $ "pipe fdInvoke: Parent closing " ++ show [reader, writer]
            mapM_ closeFd [reader, writer]
            
            d $ "*** Done handling pipe " ++ show pc
@@ -224,12 +227,23 @@ with a large amount of data. -}
 runS :: ShellCommand a => a -> IO String
 runS cmd =
     do (pread, pwrite) <- createPipe
-       r <- fdInvoke cmd stdInput pwrite nullParentFunc (closeFd pread)
+       d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
+       d "runS 1"
+       r <- fdInvoke cmd stdInput pwrite nullParentFunc 
+            (d ("runS child closing " ++ show pread) >> closeFd pread)
+       d $ "runS 2 closing " ++ show pwrite
        closeFd pwrite
+       d "runS 3"
        hread <- fdToHandle pread
+       d "runS 4"
        c <- hGetContents hread
+       d "runS 5"
        evaluate (length c)
+       d "runS 6"
+       hClose hread
+       d "runS 7"
        checkResults r
+       d "runS 8"
        return c
        
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
@@ -241,7 +255,8 @@ checkResults r =
          x -> fail (unlines x)
     where procresult :: InvokeResult -> IO (Maybe String)
           procresult (cmd, action) = 
-              do rc <- action
+              do d $ "Procresult on: " ++ show cmd
+                 rc <- action
                  return $ case rc of
                    Exited (ExitSuccess) -> Nothing
                    Exited (ExitFailure x) -> Just $ cmd ++ ": exited with code " ++ show x
