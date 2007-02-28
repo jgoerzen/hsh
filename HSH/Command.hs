@@ -188,14 +188,14 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
            d $ "pipd fdInvoke: New pipe endpoints: " ++ show (reader, writer)
            res1 <- fdInvoke cmd1 fstdin writer 
                    ((d $ "res1sub closing r " ++ show reader) >> 
-                    mapM_ closeFd [reader])
+                    mapM_ closeFd [reader, fstdout])
                    ((d $ "res1client closing r " ++ show reader) >> 
-                    closeFd reader >> subproc >> forkfunc)
+                    mapM_ closeFd [reader, fstdout] >> subproc >> forkfunc)
            res2 <- fdInvoke cmd2 reader fstdout 
                    ((d $ "res2sub closing w " ++ show writer) >>
-                    mapM_ closeFd [writer])
+                    mapM_ closeFd [writer, fstdin])
                    ((d $ "res2client closing w " ++ show writer) >> 
-                    closeFd writer >> subproc >> forkfunc)
+                    mapM_ closeFd [writer, fstdin] >> subproc >> forkfunc)
            d $ "pipe fdInvoke: Parent closing " ++ show [reader, writer]
            mapM_ closeFd [reader, writer]
            
@@ -229,7 +229,7 @@ runS cmd =
     do (pread, pwrite) <- createPipe
        d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
        d "runS 1"
-       r <- fdInvoke cmd stdInput pwrite nullParentFunc 
+       r <- fdInvoke cmd stdInput pwrite nullParentFunc
             (d ("runS child closing " ++ show pread) >> closeFd pread)
        d $ "runS 2 closing " ++ show pwrite
        closeFd pwrite
