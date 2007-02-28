@@ -215,7 +215,10 @@ run cmd =
     do r <- fdInvoke cmd stdInput stdOutput nullParentFunc nullChildFunc
        checkResults r
 
-{- | Runs, with input from stdin and output to a Haskell string. -}
+{- | Runs, with input from stdin and output to a Haskell string. 
+
+The result string is NOT computed lazily.  Do not use this function
+with a large amount of data. -}
 runS :: ShellCommand a => a -> IO String
 runS cmd =
     do (pread, pwrite) <- createPipe
