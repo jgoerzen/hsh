@@ -79,34 +79,34 @@ instance Show (String -> IO String) where
   
 instance ShellCommand (String -> IO String) where
     fdInvoke func fstdin fstdout childclosefds childfunc =
-        do d $ "Before fork for String->IO String func"
+        do d $ "SIOSF: Before fork"
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork for func: " ++ show x
-           d $ "New func pid " ++ show pid
+           d $ "SIOSFP: New func pid " ++ show pid
            return $ seq pid pid
            return [(show func,
                    getProcessStatus True False pid >>=
                                     (return . forceMaybe))]
         where childstuff = do closefds childclosefds [fstdin, fstdout]
-                              d $ "Input is on " ++ show fstdin
+                              d $ "SIOSFC Input is on " ++ show fstdin
                               hr <- fdToHandle fstdin
-                              d $ "Output is on " ++ show fstdout
+                              d $ "SIOSFC Output is on " ++ show fstdout
                               hw <- fdToHandle fstdout
                               hSetBuffering hw LineBuffering
-                              d $ "Running child func"
+                              d $ "SIOSFC Running child func"
                               childfunc
-                              d $ "Running func in child"
+                              d $ "SIOSFC Running func in child"
                               contents <- hGetContents hr
-                              d $ "Contents read"
+                              d $ "SIOSFC Contents read"
                               result <- func contents
-                              d $ "Func applied"
+                              d $ "SIOSFC Func applied"
                               hPutStr hw result
-                              d $ "Func done, closing handles."
+                              d $ "SIOSFC Func done, closing handles."
                               hClose hr
                               hClose hw
-                              d $ "Child exiting."
+                              d $ "SIOSFC Child exiting."
                               -- It hung here without the exitImmediately
                               --exitImmediately ExitSuccess
 
@@ -147,19 +147,22 @@ first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand (String, [String]) where
     fdInvoke pc@(cmd, args) fstdin fstdout childclosefds childfunc = 
-        do d $ "Before fork for " ++ show pc
+        do d $ "S Before fork for " ++ show pc
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork: " ++ show x
-           d $ "New pid " ++ show pid ++ " for " ++ show pc
+           d $ "SP New pid " ++ show pid ++ " for " ++ show pc
            return $ seq pid pid
            return [(show (cmd, args), 
                    getProcessStatus True False pid >>=
                                         (return . forceMaybe))]
            
         where 
-              childstuff = do redir fstdin stdInput
+              childstuff = do d $ "SC preparing to redir"
+                              d $ "SC input is on " ++ show fstdin
+                              d $ "SC output is on " ++ show fstdout
+                              redir fstdin stdInput
                               redir fstdout stdOutput
                               closefds childclosefds [fstdin, fstdout, 0, 1]
                               childfunc
