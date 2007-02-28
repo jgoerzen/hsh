@@ -49,6 +49,7 @@ import System.Log.Logger
 import System.IO.Error
 import Data.Maybe.Utils
 import Data.Maybe
+import Data.List.Utils(uniq)
 import Control.Exception(evaluate)
 
 d = debugM "HSH.Command"
@@ -67,7 +68,7 @@ class (Show a) => ShellCommand a where
     fdInvoke :: a               -- ^ The command
              -> Fd              -- ^ fd to pass to it as stdin
              -> Fd              -- ^ fd to pass to it as stdout
-             -> (IO ()) -- ^ Action to run post-fork in the child, but only if this child is itself the child of a pipe.
+             -> [Fd]            -- ^ Fds to close in the child.  Will not harm Fds this child needs for stdin and stdout.
              -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
@@ -77,7 +78,7 @@ instance Show (String -> IO String) where
     show _ = "(String -> IO String)"
   
 instance ShellCommand (String -> IO String) where
-    fdInvoke func fstdin fstdout subprocfunc childfunc =
+    fdInvoke func fstdin fstdout childclosefds childfunc =
         do d $ "Before fork for String->IO String func"
            p <- try (forkProcess childstuff)
            pid <- case p of
@@ -88,12 +89,13 @@ instance ShellCommand (String -> IO String) where
            return [(show func,
                    getProcessStatus True False pid >>=
                                     (return . forceMaybe))]
-        where childstuff = do d $ "Input is on " ++ show fstdin
+        where childstuff = do closefds childclosefds [fstdin, fstdout]
+                              d $ "Input is on " ++ show fstdin
                               hr <- fdToHandle fstdin
                               d $ "Output is on " ++ show fstdout
                               hw <- fdToHandle fstdout
-                              --hSetBuffering hw LineBuffering
-                              d $ "Closing stdin, stdout"
+                              hSetBuffering hw LineBuffering
+                              d $ "Running child func"
                               childfunc
                               d $ "Running func in child"
                               contents <- hGetContents hr
@@ -106,14 +108,14 @@ instance ShellCommand (String -> IO String) where
                               hClose hw
                               d $ "Child exiting."
                               -- It hung here without the exitImmediately
-                              exitImmediately ExitSuccess
+                              --exitImmediately ExitSuccess
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String.  Implement in terms of (String -> IO String) for
 simplicity. -}
 instance ShellCommand (String -> String) where
-    fdInvoke func fstdin fstdout subprocfunc childfunc =
-        fdInvoke iofunc fstdin fstdout subprocfunc childfunc
+    fdInvoke func fstdin fstdout childclosefds childfunc =
+        fdInvoke iofunc fstdin fstdout childclosefds childfunc
             where iofunc :: String -> IO String
                   iofunc = return . func
 
@@ -144,7 +146,7 @@ instance ShellCommand ([String] -> IO [String]) where
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand (String, [String]) where
-    fdInvoke pc@(cmd, args) fstdin fstdout subprocfunc childfunc = 
+    fdInvoke pc@(cmd, args) fstdin fstdout childclosefds childfunc = 
         do d $ "Before fork for " ++ show pc
            p <- try (forkProcess childstuff)
            pid <- case p of
@@ -159,6 +161,7 @@ instance ShellCommand (String, [String]) where
         where 
               childstuff = do redir fstdin stdInput
                               redir fstdout stdOutput
+                              closefds childclosefds [fstdin, fstdout, 0, 1]
                               childfunc
                               d ("Running: " ++ cmd ++ " " ++ (show args))
                               executeFile cmd True args Nothing
@@ -176,26 +179,28 @@ redir fromfd tofd
                      dupTo fromfd tofd
                      closeFd fromfd
 
+closefds :: [Fd]                   -- ^ List of Fds to possibly close
+         -> [Fd]                   -- ^ List of Fds to not touch, ever
+         -> IO ()
+closefds inpclosefds noclosefds =
+    do d $ "closefds " ++ show closefds ++ " " ++ show noclosefds
+       mapM_ closeit . filter (\x -> not (x `elem` noclosefds)) $ closefds
+    where closeit fd = do d $ "Closing fd " ++ show fd
+                          closeFd fd
+          closefds = uniq inpclosefds
 
 data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
    deriving Show
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout subproc forkfunc = 
+    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout childclosefds forkfunc = 
         do d $ "*** Handling pipe: " ++ show pc
            (reader, writer) <- createPipe
+           let allfdstoclose = reader : writer : fstdin : fstdout : childclosefds
            d $ "pipd fdInvoke: New pipe endpoints: " ++ show (reader, writer)
-           res1 <- fdInvoke cmd1 fstdin writer 
-                   ((d $ "res1sub closing r " ++ show reader) >> 
-                    mapM_ closeFd [reader, fstdout])
-                   ((d $ "res1client closing r " ++ show reader) >> 
-                    mapM_ closeFd [reader, fstdout] >> subproc >> forkfunc)
-           res2 <- fdInvoke cmd2 reader fstdout 
-                   ((d $ "res2sub closing w " ++ show writer) >>
-                    mapM_ closeFd [writer, fstdin])
-                   ((d $ "res2client closing w " ++ show writer) >> 
-                    mapM_ closeFd [writer, fstdin] >> subproc >> forkfunc)
+           res1 <- fdInvoke cmd1 fstdin writer allfdstoclose forkfunc
+           res2 <- fdInvoke cmd2 reader fstdout allfdstoclose forkfunc
            d $ "pipe fdInvoke: Parent closing " ++ show [reader, writer]
            mapM_ closeFd [reader, writer]
            
@@ -217,7 +222,7 @@ nullChildFunc = return ()
 {- | Runs, with input from stdin and output to stdout. -}
 run :: ShellCommand a => a -> IO ()
 run cmd = 
-    do r <- fdInvoke cmd stdInput stdOutput nullParentFunc nullChildFunc
+    do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
        checkResults r
 
 {- | Runs, with input from stdin and output to a Haskell string. 
@@ -229,8 +234,7 @@ runS cmd =
     do (pread, pwrite) <- createPipe
        d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
        d "runS 1"
-       r <- fdInvoke cmd stdInput pwrite nullParentFunc
-            (d ("runS child closing " ++ show pread) >> closeFd pread)
+       r <- fdInvoke cmd stdInput pwrite [pread, pwrite] nullChildFunc
        d $ "runS 2 closing " ++ show pwrite
        closeFd pwrite
        d "runS 3"
