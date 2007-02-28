@@ -13,3 +13,7 @@ main =
 
 countLines :: [String] -> [String]
 countLines = zipWith (\i line -> printf "%-5d %s" i line) [(1::Int)..]
+
+:m HSH HSH.ShellEquivs System.Log.Logger
+updateGlobalLogger rootLoggerName (setLevel DEBUG)
+runS $ "ls -l" -|- wcL
