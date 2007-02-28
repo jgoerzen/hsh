@@ -1,6 +1,6 @@
 {- Commands for HSH
 
-Copyright (C) 2006 John Goerzen <jgoerzen@complete.org>
+Copyright (C) 2006-2007 John Goerzen <jgoerzen@complete.org>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,14 +19,14 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 {- |
    Module     : HSH.Command
-   Copyright  : Copyright (C) 2006 John Goerzen
+   Copyright  : Copyright (C) 2006-2007 John Goerzen
    License    : GNU GPL, version 2 or above
 
    Maintainer : John Goerzen <jgoerzen@complete.org> 
    Stability  : provisional
    Portability: portable
 
-Copyright (c) 2006 John Goerzen, jgoerzen\@complete.org
+Copyright (c) 2006-2007 John Goerzen, jgoerzen\@complete.org
 -}
 
 module HSH.Command (ShellCommand(..),
@@ -36,17 +36,17 @@ module HSH.Command (ShellCommand(..),
                     InvokeResult
                    ) where
 
-import MissingH.Cmd hiding (pipeBoth)
-import MissingH.IO.HVIO
-import MissingH.IO
+import System.Cmd.Utils hiding (pipeBoth)
+import System.IO.HVIO
+import System.IO.Utils
 import System.IO
 import System.Exit
 import System.Posix.Types
 import System.Posix.IO
 import System.Posix.Process
-import MissingH.Logging.Logger
+import System.Log.Logger
 import System.IO.Error
-import MissingH.Maybe
+import Data.Maybe.Utils
 import Data.Maybe
 
 d = debugM "HSH.Command"

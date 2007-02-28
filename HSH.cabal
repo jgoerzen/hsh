@@ -1,5 +1,5 @@
 Name: HSH
-Version: 0.1.0
+Version: 0.2.0
 License: GPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
 Stability: Alpha
@@ -7,7 +7,7 @@ Copyright: Copyright (c) 2006 John Goerzen
 Exposed-Modules: HSH, HSH.Command
 Extensions: ExistentialQuantification, AllowOverlappingInstances,
     AllowUndecidableInstances
-Build-Depends: base, unix, haskell98, mtl, HUnit, MissingH>=0.14.2
+Build-Depends: base, unix, haskell98, mtl, HUnit, MissingH>=0.18.0, hslogger
 GHC-Options: -O2
 
 Executable: runtests

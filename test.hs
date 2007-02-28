@@ -1,7 +1,7 @@
 import HSH
 import Text.Printf
-import MissingH.Logging.Logger
-import MissingH.Logging.Handler.Syslog
+import System.Log.Logger
+import System.Log.Handler.Syslog
 
 main = 
  do s <- openlog "test" [PID] USER DEBUG
