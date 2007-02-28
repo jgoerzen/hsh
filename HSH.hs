@@ -34,6 +34,7 @@ use HSH.
 
 module HSH (ShellCommand(..),
             run,
+            runS,
             (-|-),
             InvokeResult,
             PipeCommand(..))

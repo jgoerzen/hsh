@@ -33,6 +33,7 @@ module HSH.Command (ShellCommand(..),
                     PipeCommand(..),
                     (-|-),
                     run,
+                    runS,
                     InvokeResult
                    ) where
 
@@ -48,6 +49,8 @@ import System.Log.Logger
 import System.IO.Error
 import Data.Maybe.Utils
 import Data.Maybe
+import Data.IORef
+import Control.Exception(evaluate)
 
 d = debugM "HSH.Command"
 
@@ -212,6 +215,23 @@ run :: ShellCommand a => a -> IO ()
 run cmd = 
     do r <- fdInvoke cmd stdInput stdOutput nullParentFunc nullChildFunc
        checkResults r
+
+{- | Runs, with input from stdin and output to a Haskell string. -}
+runS :: ShellCommand a => a -> IO String
+runS cmd =
+    do ref <- newIORef "before"
+       run (realcmd ref)
+       readIORef ref
+    where realcmd ref = cmd -|- (capstring ref)
+          capstring :: IORef String -> String -> IO String
+          capstring ref inp = 
+              do d $ "Ready to putmvar"
+                 evaluate (length inp)
+                 d $ "inp is " ++ show inp
+                 evaluate $ writeIORef ref inp
+                 d $ "putmvar done"
+                 return inp
+
        
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
 checkResults :: [InvokeResult] -> IO ()
