@@ -44,6 +44,7 @@ import HSH.Command
 import Data.List
 import Text.Regex
 import Control.Monad
+import Control.Exception(evaluate)
 
 {- | Load the specified files and display them, one at a time. 
 

@@ -103,6 +103,8 @@ instance ShellCommand (String -> IO String) where
                               hClose hr
                               hClose hw
                               d $ "Child exiting."
+                              -- It hung here without the exitImmediately
+                              exitImmediately ExitSuccess
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String.  Implement in terms of (String -> IO String) for
