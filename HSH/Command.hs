@@ -49,7 +49,6 @@ import System.Log.Logger
 import System.IO.Error
 import Data.Maybe.Utils
 import Data.Maybe
-import Data.IORef
 import Control.Exception(evaluate)
 
 d = debugM "HSH.Command"
@@ -68,7 +67,7 @@ class (Show a) => ShellCommand a where
     fdInvoke :: a               -- ^ The command
              -> Fd              -- ^ fd to pass to it as stdin
              -> Fd              -- ^ fd to pass to it as stdout
-             -> (IO ()) -- ^ Action to run post-fork in the child, but only if this child is itself the child of a pipe.
+             -> (IO ()) -- ^ Action to run post-fork in the parent, but only if this child is itself the child of a pipe.
              -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
@@ -219,19 +218,14 @@ run cmd =
 {- | Runs, with input from stdin and output to a Haskell string. -}
 runS :: ShellCommand a => a -> IO String
 runS cmd =
-    do ref <- newIORef "before"
-       run (realcmd ref)
-       readIORef ref
-    where realcmd ref = cmd -|- (capstring ref)
-          capstring :: IORef String -> String -> IO String
-          capstring ref inp = 
-              do d $ "Ready to putmvar"
-                 evaluate (length inp)
-                 d $ "inp is " ++ show inp
-                 evaluate $ writeIORef ref inp
-                 d $ "putmvar done"
-                 return inp
-
+    do (pread, pwrite) <- createPipe
+       r <- fdInvoke cmd stdInput pwrite nullParentFunc (closeFd pread)
+       closeFd pwrite
+       hread <- fdToHandle pread
+       c <- hGetContents hread
+       evaluate (length c)
+       checkResults r
+       return c
        
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
 checkResults :: [InvokeResult] -> IO ()
