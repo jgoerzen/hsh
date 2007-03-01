@@ -43,7 +43,8 @@ pipes =
      cmdcase "s->s|s->s|s->s" "BAR\nBAZ\n" $
              catFromS lsbase -|- (map toUpper) -|- grep "BA",
      cmdcase "true" "0\n" $ "true" -|- "wc -l",
-     cmdcase "true|true" "" $ "true" -|- "true"
+     cmdcase "true|true" "" $ "true" -|- "true",
+     cmdcase "shell" "testsrc/testdata/bar\ntestsrc/testdata/baz\ntestsrc/testdata/foo\ntestsrc/testdata/quux\n" "ls testsrc/testdata/*"
     ]
     where lsbase = "bar\nbaz\nfoo\nquux\n"
           lscmd = "ls testsrc/testdata"
