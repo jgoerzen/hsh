@@ -11,6 +11,7 @@ import HSH.ShellEquivs
 import TestUtils
 import Data.Char
 import Control.Exception
+import Data.List
 
 tabspath = []                   -- FIXME: need some way to test this
 
@@ -71,6 +72,31 @@ tcd =
         assertEqual "after cd .." p p3
     ]
 
+tgreps =
+    [tc "oo" (isInfixOf "oo") (grep "oo") (grepV "oo"),
+     tc "nonexistant" (\_ -> False) (grep "nonexistant") 
+            (grepV "nonexistant"),
+     tc "e ^oo" (isPrefixOf "oo") (egrep "^oo") (egrepV "^oo"),
+     tc "e nonexistant" (\_ -> False) (egrep "nonexistant") (egrepV "nonexistant")
+    ]
+    where tc name filtfunc cmd cmdv = TestLabel name $ TestCase $
+              do c <- readFile "testsrc/testdata/quux"
+                 let exp = unlines . filter filtfunc . lines $ c
+                 let expv = unlines . filter (not . filtfunc) . lines $ c
+                 r <- runS (catFrom ["testsrc/testdata/quux"] -|- cmd)
+                 assertEqual "grep" exp r
+                 r2 <- runS (catFrom ["testsrc/testdata/quux"] -|- cmdv)
+                 assertEqual "grepv" expv r2
+                 
+twcL = 
+    [t "null" 0 ("echo", ["-n", ""]),
+     t "empty" 1 ("echo", [""]),
+     t "no eol" 1 ("echo", ["-n", "foo"]), -- shell does 0 here; which is right?
+     t "normal" 1 "echo foo",
+     t "quux" 100 (catFrom ["testsrc/testdata/quux"])]
+    where t name expint cmd =
+              cmdcase name ((show expint) ++ "\n") (cmd -|- wcL)
+
 tests = TestList
         [tl "abspath" tabspath,
          tl "basename" tbasename,
@@ -78,16 +104,13 @@ tests = TestList
          tl "catFrom" tcatFrom,
          tl "catFromS" tcatFromS,
          tl "catTo" tcatTo,
-         tl "cd" tcd
+         tl "cd" tcd,
+         tl "grep family" tgreps,
+         tl "wcL" twcL
 {-
-         tl "grep" tgrep,
-         tl "grepV" tgrepV,
-         tl "egrep" tegrep,
-         tl "egrepV" tegrepV,
          -- tl "pwd" tpwd, -- covered by tcd
          tl "readlink" treadlink,
-         tl "tee" ttee,
-         tl "wcL" wcL -}
+         tl "tee" ttee -}
         ]
     where tl x y = TestLabel x $ TestList y
 
