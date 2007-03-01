@@ -17,29 +17,29 @@
 GHCPARMS := -fglasgow-exts
 
 .PHONY: all hugsbuild
-all:
-	./Setup.lhs configure
-	./Setup.lhs build
+all: setup
+	./setup configure
+	./setup build
 
 hugsbuild: 
-	./Setup.lhs configure --hugs
-	./Setup.lhs build
+	hugs Setup.lhs configure --hugs
+	hugs Setup.lhs build
 
-install:
-	./Setup.lhs install
+install: setup
+	./setup install
 
 setup: Setup.lhs HSH.cabal
 	ghc -package Cabal Setup.lhs -o setup
 
 clean:
-	-./Setup.lhs clean
+	-./setup clean
 	-rm -rf html `find . -name "*.o"` `find . -name "*.hi"` \
 		`find . -name "*~"` *.a setup dist testsrc/runtests \
 		local-pkg doctmp
 	-rm -rf testtmp/* testtmp*
 
 testsrc/runtests: all $(wildcard testsrc/*.hs) $(wildcard testsrc/*/*.hs) $(wildcard testsrc/*/*/*.hs)
-	cd testsrc && ghc --make -package base -package mtl -package HUnit -package MissingH -package unix -package hslogger -package regex-compat -o runtests  -i../dist/build:.. runtests.hs
+	cd testsrc && ghc --make -fglasgow-exts -package base -package mtl -package HUnit -package MissingH -package unix -package hslogger -package regex-compat -o runtests  -i../dist/build:.. runtests.hs
 
 test-ghc6: testsrc/runtests
 	testsrc/runtests
@@ -55,5 +55,4 @@ interact-ghci: all
 
 interact: interact-hugs
 
-test: test-ghc6 test-hugs
-
+test: test-ghc6 

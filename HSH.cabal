@@ -4,9 +4,9 @@ License: LGPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
 Stability: Beta
 Copyright: Copyright (c) 2006-2007 John Goerzen
-Exposed-Modules: HSH, HSH.Command
-Extensions: ExistentialQuantification, AllowOverlappingInstances,
-    AllowUndecidableInstances
+Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
+Extensions: ExistentialQuantification, OverlappingInstances,
+    UndecidableInstances
 Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.0, hslogger
 GHC-Options: -O2
 
@@ -14,5 +14,5 @@ Executable: runtests
 Buildable: False 
 Main-Is: runtests.hs
 HS-Source-Dir: testsrc
-Extensions: ExistentialQuantification, AllowOverlappingInstances,
-    AllowUndecidableInstances, CPP
+Extensions: ExistentialQuantification, OverlappingInstances,
+    UndecidableInstances

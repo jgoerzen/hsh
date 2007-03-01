@@ -3,8 +3,8 @@ Copyright (C) 2004-2007 John Goerzen <jgoerzen@complete.org>
 Please see the COPYRIGHT file
 -}
 
-module TestUtils() where
-import HUnit
+module TestUtils where
+import Test.HUnit
 import HSH
 
 testcmd expected cmd =
