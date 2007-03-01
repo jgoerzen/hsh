@@ -49,10 +49,10 @@ pipes =
           lscmd = "ls testsrc/testdata"
 
 sleeptests = 
-    [cmdcase "sleep 0.25" "" "sleep 0.25",
-     cmdcase "sleep|true" "" $ "sleep 0.25" -|- "true",
-     cmdcase "true|sleep" "" $ "true" -|- "sleep 0.25",
-     cmdcase "true|sleep|true" "" $ "true" -|- "sleep 0.25" -|- "true"
+    [cmdcase "sleep 0.10" "" "sleep 0.10",
+     cmdcase "sleep|true" "" $ "sleep 0.10" -|- "true",
+     cmdcase "true|sleep" "" $ "true" -|- "sleep 0.10",
+     cmdcase "true|sleep|true" "" $ "true" -|- "sleep 0.10" -|- "true"
     ]
     
 errortests =
