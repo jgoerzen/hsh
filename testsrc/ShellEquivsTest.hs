@@ -40,21 +40,23 @@ tdirname =
     tbasenamedirname 
     (\inp expbn expdn -> TestLabel inp $ TestCase $ assertEqual inp expdn (dirname inp))
 
-basics =
-    [cmdcase "echo" "hi\n" $ "echo hi",
-     cmdcase "echo as args" "there\n" $ ("echo", ["there"]),
-     cmdcase "more args 1" "100 testsrc/testdata/quux\n" 
-                 "wc -l testsrc/testdata/quux",
-     cmdcase "more args 2" "100 testsrc/testdata/quux\n" 
-                 ("wc", ["-l", "testsrc/testdata/quux"])
+tcatFrom = 
+    [cmdcase "basic" foo $ catFrom [fn],
+     cmdcase "twice" (foo ++ foo) $ catFrom [fn, fn],
+     cmdcase "-,foo" ("hi\n" ++ foo) $ "echo hi" -|- catFrom ["-", fn],
+     cmdcase "foo,-" (foo ++ "hi\n") $ "echo hi" -|- catFrom [fn, "-"],
+     cmdcase "foo,-,cat" "     1\t1234\n     2\t5678\n     3\t14\n     4\thi\n"
+             $ "echo hi" -|- catFrom [fn, "-"] -|- "cat -n"
     ]
+    where fn = "testsrc/testdata/foo"
+          foo = "1234\n5678\n14\n"
 
 tests = TestList
         [tl "abspath" tabspath,
          tl "basename" tbasename,
-         tl "dirname" tdirname
+         tl "dirname" tdirname,
+         tl "catFrom" tcatFrom
 {-
-         tl "catFrom" tcatFrom,
          tl "catFromS" tcatFromS,
          tl "catTo" tcatTo,
          tl "cd" tcd,
