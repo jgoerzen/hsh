@@ -57,11 +57,11 @@ sleeptests =
     
 errortests =
     [errcase "ls" "(\"false\",[]): exited with code 1\n"
-                 "false",
+                 ("false", []::[String]),
      errcase "false|true" "(\"false\",[]): exited with code 1\n" $
-                  "false" -|- "true",
+                  ("false", []::[String]) -|- "true",
      errcase "true|false" "(\"false\",[]): exited with code 1\n" $
-                  "true" -|- "false",
+                  "true" -|- ("false", []::[String]),
      errcase "sh80" "(\"sh\",[\"-c\",\"exit 80\"]): exited with code 80\n" $
                   ("sh", ["-c", "exit 80"])
     ]

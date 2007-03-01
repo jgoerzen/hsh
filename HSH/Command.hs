@@ -37,6 +37,7 @@ import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
 import Control.Exception(evaluate)
+import System.Posix.Env
 
 d = debugM "HSH.Command"
 
@@ -158,8 +159,12 @@ instance ShellCommand (String, [String]) where
 {- | An instance of 'ShellCommand' for an external command.  The
 String is split using words to the command to run, and the arguments, if any. -}
 instance ShellCommand String where
-    fdInvoke cmdline = fdInvoke (cmd,opts)
-    	where (cmd:opts) = words cmdline
+    fdInvoke cmdline ifd ofd closefd forkfunc = 
+        do esh <- getEnv "SHELL"
+           let sh = case esh of
+                      Nothing -> "/bin/sh"
+                      Just x -> x
+           fdInvoke (sh, ["-c", cmdline]) ifd ofd closefd forkfunc
 
 redir fromfd tofd 
     | fromfd == tofd = do d $ "ignoring identical redir " ++ show fromfd
