@@ -46,7 +46,6 @@ import Control.Monad
 import Control.Exception(evaluate)
 import System.Directory
 import System.Posix.Files
-import System.FilePath
 import System.Path
 
 {- | Load the specified files and display them, one at a time. 
@@ -153,10 +152,19 @@ readlinkabs inp =
                     show (dirname inp)
          Just x -> return x
 
-{- | An alias for System.FilePath.takeBaseName -}    
-basename :: FilePath -> FilePath
-basename = takeBaseName
+splitpath "" = (".", ".")
+splitpath "/" = ("/", "/")
+splitpath p 
+    | last p == '/' = splitpath (init p)
+    | not ('/' `elem` p) = (".", p)
+    | head p == '/' && length (filter (== '/') p) == 1 = ("/", tail p)
+    | otherwise = (\(base, dir) -> (reverse (tail dir), reverse base))
+        (break (== '/') (reverse p))
 
-{- | An alias for System.FilePath.takeDirectory -}
+{- | The filename part of a path -}
+basename :: FilePath -> FilePath
+basename = snd . splitpath
+
+{- | The directory part of a path -}
 dirname :: FilePath -> FilePath
-dirname = takeDirectory
+dirname = fst . splitpath
