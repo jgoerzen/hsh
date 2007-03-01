@@ -54,18 +54,19 @@ tcatFrom =
 tcatFromS =
     [cmdcase "basic" s $ catFromS s,
      cmdcase "shcat" s $ catFromS s -|- "cat",
-     cmdcase "cat" s $ catFromS s -|- catFrom []
+     cmdcase "cat" s $ catFromS s -|- catFrom ["-"]
     ]
+    where s = "testfoobarbaz"
 
 tcatTo = [] -- FIXME: write
 
 tcd =
     [TestCase $ 
      do p <- pwd
-        tcd "testsrc"
+        cd "testsrc"
         p2 <- pwd
         assertEqual "after cd" (p ++ "/testsrc") p2
-        tcd ".."
+        cd ".."
         p3 <- pwd
         assertEqual "after cd .." p p3
     ]
@@ -74,11 +75,11 @@ tests = TestList
         [tl "abspath" tabspath,
          tl "basename" tbasename,
          tl "dirname" tdirname,
-         tl "catFrom" tcatFrom
-{-
+         tl "catFrom" tcatFrom,
          tl "catFromS" tcatFromS,
          tl "catTo" tcatTo,
-         tl "cd" tcd,
+         tl "cd" tcd
+{-
          tl "grep" tgrep,
          tl "grepV" tgrepV,
          tl "egrep" tegrep,
