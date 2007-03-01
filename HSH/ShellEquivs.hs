@@ -13,6 +13,11 @@ Please see the COPYRIGHT file
    Portability: portable
 
 Copyright (c) 2006-2007 John Goerzen, jgoerzen\@complete.org
+
+This module provides shell-like commands.  Most, but not all, are designed
+to be used directly as part of a HSH pipeline.  All may be used outside
+HSH entirely as well.
+
 -}
 
 module HSH.ShellEquivs(
