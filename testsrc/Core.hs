@@ -48,6 +48,13 @@ pipes =
     where lsbase = "bar\nbaz\nfoo\nquux\n"
           lscmd = "ls testsrc/testdata"
 
+sleeptests = 
+    [cmdcase "sleep 0.25" "" "sleep 0.25",
+     cmdcase "sleep|true" "" $ "sleep 0.25" -|- "true",
+     cmdcase "true|sleep" "" $ "true" -|- "sleep 0.25",
+     cmdcase "true|sleep|true" "" $ "true" -|- "sleep 0.25" -|- "true"
+    ]
+    
 errortests =
     [errcase "ls" "(\"false\",[]): exited with code 1\n"
                  "false",
@@ -68,5 +75,6 @@ errortests =
 tests = TestList
         [TestLabel "basics" $ TestList basics,
          TestLabel "pipes" $ TestList pipes,
-         TestLabel "errors" $ TestList errortests]
+         TestLabel "errors" $ TestList errortests,
+         TestLabel "sleep" $ TestList sleeptests]
 
