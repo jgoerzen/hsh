@@ -7,7 +7,7 @@ Copyright: Copyright (c) 2006-2007 John Goerzen
 Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances
-Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.0, hslogger
+Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.0, hslogger, FilePath
 GHC-Options: -O2
 
 Executable: runtests
