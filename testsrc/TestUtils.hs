@@ -11,9 +11,9 @@ import HSH
 or nondeterministic behavior.  Not perfect, but it could help anyhow. -}
 
 testcmd expected cmd =
-    do r <- runS cmd
-       r2 <- runS cmd
-       r3 <- runS cmd
+    do r <- run cmd
+       r2 <- run cmd
+       r3 <- run cmd
        assertEqual "expected" expected r
        assertEqual "run 2" expected r2
        assertEqual "run 3" expected r3

@@ -83,9 +83,9 @@ tgreps =
               do c <- readFile "testsrc/testdata/quux"
                  let exp = unlines . filter filtfunc . lines $ c
                  let expv = unlines . filter (not . filtfunc) . lines $ c
-                 r <- runS (catFrom ["testsrc/testdata/quux"] -|- cmd)
+                 r <- run (catFrom ["testsrc/testdata/quux"] -|- cmd)
                  assertEqual "grep" exp r
-                 r2 <- runS (catFrom ["testsrc/testdata/quux"] -|- cmdv)
+                 r2 <- run (catFrom ["testsrc/testdata/quux"] -|- cmdv)
                  assertEqual "grepv" expv r2
                  
 twcL = 

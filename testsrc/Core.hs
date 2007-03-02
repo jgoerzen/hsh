@@ -57,21 +57,21 @@ sleeptests =
     ]
     
 errortests =
-    [errcase "ls" "(\"false\",[]): exited with code 1\n"
+    [errcase "ls" "(\"false\",[]): exited with code 1"
                  ("false", []::[String]),
-     errcase "false|true" "(\"false\",[]): exited with code 1\n" $
+     errcase "false|true" "(\"false\",[]): exited with code 1" $
                   ("false", []::[String]) -|- "true",
-     errcase "true|false" "(\"false\",[]): exited with code 1\n" $
+     errcase "true|false" "(\"false\",[]): exited with code 1" $
                   "true" -|- ("false", []::[String]),
-     errcase "sh80" "(\"sh\",[\"-c\",\"exit 80\"]): exited with code 80\n" $
+     errcase "sh80" "(\"sh\",[\"-c\",\"exit 80\"]): exited with code 80" $
                   ("sh", ["-c", "exit 80"])
     ]
     where errcase name exp cmd =
               TestLabel name $ TestCase $ 
                         do assertRaises "runS" (IOException (userError exp))
-                                        (runS cmd)
+                                        ((run cmd)::IO String)
                            assertRaises "run" (IOException (userError exp))
-                                        (run cmd)
+                                        ((run cmd)::IO ())
        
 tests = TestList
         [TestLabel "basics" $ TestList basics,
