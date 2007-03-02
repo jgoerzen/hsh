@@ -1,44 +1,6 @@
-hdbc-postgresql (1.0.1.1) unstable; urgency=low
+haskell-hsh (1.0.0) unstable; urgency=low
 
-  * Rebuilt for GHC 6.6.
+  * Initial release.  Closes: #
 
- -- John Goerzen <jgoerzen@complete.org>  Thu, 19 Oct 2006 22:05:41 -0500
+ -- John Goerzen <jgoerzen@complete.org>  Thu,  1 Mar 2007 03:00:56 -0600
 
-hdbc-postgresql (1.0.1.0) unstable; urgency=low
-
-  * Fix unknown column size, such as for text columns
-
- -- John Goerzen <jgoerzen@complete.org>  Sat, 22 Jul 2006 07:08:49 -0500
-
-hdbc-postgresql (1.0.0.0) unstable; urgency=low
-
-  * Blessing this version as 1.0.0.0
-  * Rebuilt with ghc6 6.4.2 for Debian
-
- -- John Goerzen <jgoerzen@complete.org>  Thu, 29 Jun 2006 19:01:02 -0500
-
-hdbc-postgresql (0.99.2.1) unstable; urgency=low
-
-  * Give wrapobj a unique name so that this module can coexist with ODBC
-    in a single program.
-
- -- John Goerzen <jgoerzen@complete.org>  Tue, 28 Mar 2006 22:19:26 -0600
-
-hdbc-postgresql (0.99.2.0) unstable; urgency=low
-
-  * Updated for 0.99.2.
-
- -- John Goerzen <jgoerzen@complete.org>  Tue, 28 Mar 2006 05:33:19 -0600
-
-hdbc-postgresql (0.99.1.0) unstable; urgency=low
-
-  * Releasing 0.99.1.0, with new memory management and column type
-    meta information.
-
- -- John Goerzen <jgoerzen@complete.org>  Mon, 27 Mar 2006 23:53:21 -0600
-
-hdbc-postgresql (0.99.0.0) unstable; urgency=low
-
-  * Initial Release.
-
- -- John Goerzen <jgoerzen@complete.org>  Tue, 27 Dec 2005 16:57:21 -0600
