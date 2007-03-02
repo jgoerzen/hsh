@@ -252,19 +252,19 @@ instance RunResult (IO (String, ProcessStatus)) where
            processResults r
 
 instance RunResult (IO ProcessStatus) where
-    run cmd = run cmd >>= return . snd
+    run cmd = ((run cmd)::IO (String, ProcessStatus)) >>= return . snd
 
 instance RunResult (IO Int) where
     run cmd = do rc <- run cmd
                  case rc of
                    Exited (ExitSuccess) -> return 0
                    Exited (ExitFailure x) -> return x
-                   Terminated x -> return (128 + x)
-                   Stopped x -> return (128 + x)
+                   Terminated x -> return (128 + (fromIntegral x))
+                   Stopped x -> return (128 + (fromIntegral x))
                  
 instance RunResult (IO Bool) where
-    run cmd = rc <- run cmd
-              return (rc == 0)
+    run cmd = do rc <- run cmd
+                 return ((rc::Int) == 0)
 
 instance RunResult (IO [String]) where
     run cmd = do r <- run cmd
@@ -298,7 +298,7 @@ processResults r =
        case catMaybes rc of
          [] -> return (fst (last r), Exited (ExitSuccess))
          x -> return (last x)
-    where procresult :: InvokeResult -> IO (Maybe String)
+    where procresult :: InvokeResult -> IO (Maybe (String, ProcessStatus))
           procresult (cmd, action) = 
               do rc <- action
                  return $ case rc of
@@ -307,8 +307,8 @@ processResults r =
 
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
 checkResults :: (String, ProcessStatus) -> IO ()
-checkResults rc =
-       case rc of
+checkResults (cmd, ps) =
+       case ps of
          Exited (ExitSuccess) -> return ()
          Exited (ExitFailure x) -> 
              fail $ cmd ++ ": exited with code " ++ show x
@@ -320,17 +320,22 @@ checkResults rc =
 {- | Handle an exception derived from a program exiting abnormally -}
 tryEC :: IO a -> IO (Either ProcessStatus a)
 tryEC action =
-    case try action of
-      Left ioe ->
+    do r <- try action
+       case r of
+         Left ioe ->
           if isUserError ioe then
-              case (ioeGetErrorString =~~ pat) of
+              case (ioeGetErrorString ioe =~~ pat) of
                 Nothing -> ioError ioe -- not ours; re-raise it
-                Just e -> proc e
+                Just e -> return . Left . proc $ e
+          else ioError ioe      -- not ours; re-raise it
+         Right result -> return (Right result)
     where pat = ": exited with code [0-9]+$|: terminated by signal ([0-9]+)$|: stopped by signal [0-9]+"
+          proc :: String -> ProcessStatus
           proc e 
               | e =~ "^: exited" = Exited (ExitFailure (str2ec e))
               | e =~ "^: terminated by signal" = Terminated (str2ec e)
               | e =~ "^: stopped by signal" = Stopped (str2ec e)
+              | otherwise = error "Internal error in tryEC"
           str2ec e =
               read (e =~ "[0-9]+$")
 
