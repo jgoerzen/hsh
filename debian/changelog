@@ -1,3 +1,10 @@
+haskell-hsh (1.0.1) unstable; urgency=low
+
+  * New class to handle the different ways of invoking run.
+  * Many new ways to get results back.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu,  1 Mar 2007 17:41:00 -0600
+
 haskell-hsh (1.0.0) unstable; urgency=low
 
   * Initial release.  Closes: #413017.
