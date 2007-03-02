@@ -20,7 +20,8 @@ module HSH.Command (ShellCommand(..),
                     (-|-),
                     run,
                     runS,
-                    InvokeResult
+                    InvokeResult,
+                    RunResult,
                    ) where
 
 import System.Cmd.Utils hiding (pipeBoth)
@@ -40,6 +41,7 @@ import Control.Exception(evaluate)
 import System.Posix.Env
 
 d = debugM "HSH.Command"
+dr = debugM "HSH.Command.Run"
 
 {- | Result type for shell commands -}
 type InvokeResult = (String, IO ProcessStatus)
@@ -66,12 +68,12 @@ instance Show (String -> IO String) where
   
 instance ShellCommand (String -> IO String) where
     fdInvoke func fstdin fstdout childclosefds childfunc =
-        do d $ "SIOSF: Before fork"
+        do -- d $ "SIOSF: Before fork"
            p <- try (forkProcess childstuff)
            pid <- case p of
                     Right x -> return x
                     Left x -> fail $ "Error in fork for func: " ++ show x
-           d $ "SIOSFP: New func pid " ++ show pid
+           -- d $ "SIOSFP: New func pid " ++ show pid
            return $ seq pid pid
            return [(show func,
                    getProcessStatus True False pid >>=
@@ -153,7 +155,7 @@ instance ShellCommand (String, [String]) where
                               redir fstdout stdOutput
                               closefds childclosefds [fstdin, fstdout, 0, 1]
                               childfunc
-                              d ("Running: " ++ cmd ++ " " ++ (show args))
+                              dr ("RUN: " ++ cmd ++ " " ++ (show args))
                               executeFile cmd True args Nothing
 
 {- | An instance of 'ShellCommand' for an external command.  The
@@ -213,53 +215,103 @@ nullParentFunc = return ()
 nullChildFunc :: IO ()
 nullChildFunc = return ()
 
-{- | Runs, with input from stdin and output to stdout. -}
-run :: ShellCommand a => a -> IO ()
-run cmd = 
-    do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
-       checkResults r
+{- | Different ways to get data from 'run'. 
 
-{- | Runs, with input from stdin and output to a Haskell string. 
+ * IO () runs, throws an exception on error, and sends stdout to stdout 
 
-The result string is NOT computed lazily.  Do not use this function
-with a large amount of data. -}
-runS :: ShellCommand a => a -> IO String
-runS cmd =
-    do (pread, pwrite) <- createPipe
-       d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
-       d "runS 1"
-       r <- fdInvoke cmd stdInput pwrite [pread, pwrite] nullChildFunc
-       d $ "runS 2 closing " ++ show pwrite
-       closeFd pwrite
-       d "runS 3"
-       hread <- fdToHandle pread
-       d "runS 4"
-       c <- hGetContents hread
-       d "runS 5"
-       evaluate (length c)
-       d "runS 6"
-       hClose hread
-       d "runS 7"
-       checkResults r
-       d "runS 8"
-       return c
-       
-{- | Evaluates result codes and raises an error for any bad ones it finds. -}
-checkResults :: [InvokeResult] -> IO ()
-checkResults r = 
+ * IO String runs, throws an exception on error, reads stdout into
+   a buffer, and returns it as a string.
+
+ * IO [String] is same as IO String, but returns the results as lines
+
+ * IO ProcessStatus runs and returns a ProcessStatus with the exit
+   information.  stdout is sent to stdout.  Exceptions are not thrown. 
+
+ * IO (String, ProcessStatus) is like IO ProcessStatus, but also
+   includes a description of the last command in the pipe to have
+   an error (or the last command, if there was no error)
+
+ * IO Int returns the exit code from a program directly.  If a signal
+   caused the command to be reaped, returns 128 + SIGNUM.
+
+ * IO Bool returns True if the program exited normally (exit code 0, 
+   not stopped by a signal) and False otherwise.
+
+-}
+class RunResult a where
+    run :: (ShellCommand b) => b -> a
+
+instance RunResult (IO ()) where
+    run cmd = run cmd >>= checkResults
+
+instance RunResult (IO (String, ProcessStatus)) where
+    run cmd =
+        do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
+           processResults r
+
+instance RunResult (IO ProcessStatus) where
+    run cmd = run cmd >>= return . snd
+
+instance RunResult (IO Int) where
+    run cmd = do rc <- run cmd
+                 case rc of
+                   Exited (ExitSuccess) -> return 0
+                   Exited (ExitFailure x) -> return x
+                   Terminated x -> return (128 + x)
+                   Stopped x -> return (128 + x)
+                 
+instance RunResult (IO Bool) where
+    run cmd = rc <- run cmd
+              return (rc == 0)
+
+instance RunResult (IO [String]) where
+    run cmd = do r <- run cmd
+                 return (lines r)
+
+instance RunResult (IO String) where
+    run cmd =
+        do (pread, pwrite) <- createPipe
+           -- d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
+           -- d "runS 1"
+           r <- fdInvoke cmd stdInput pwrite [pread, pwrite] nullChildFunc
+           -- d $ "runS 2 closing " ++ show pwrite
+           closeFd pwrite
+           -- d "runS 3"
+           hread <- fdToHandle pread
+           -- d "runS 4"
+           c <- hGetContents hread
+           -- d "runS 5"
+           evaluate (length c)
+           -- d "runS 6"
+           hClose hread
+           -- d "runS 7"
+           processResults r >>= checkResults
+           -- d "runS 8"
+           return c
+
+{- | Evaluates the result codes and returns an overall status -}
+processResults :: [InvokeResult] -> IO (String, ProcessStatus)
+processResults r = 
     do rc <- mapM procresult r
        case catMaybes rc of
-         [] -> return ()
-         x -> fail (unlines x)
+         [] -> return (fst (last r), Exited (ExitSuccess))
+         x -> return (last x)
     where procresult :: InvokeResult -> IO (Maybe String)
           procresult (cmd, action) = 
-              do d $ "Procresult on: " ++ show cmd
-                 rc <- action
+              do rc <- action
                  return $ case rc of
                    Exited (ExitSuccess) -> Nothing
-                   Exited (ExitFailure x) -> Just $ cmd ++ ": exited with code " ++ show x
-                   Terminated sig -> 
-                       Just $ cmd ++ ": Terminated by signal " ++ show sig
-                   Stopped sig ->
-                       Just $ cmd ++ ": Stopped by signal " ++ show sig
+                   x -> Just (cmd, x)
 
+{- | Evaluates result codes and raises an error for any bad ones it finds. -}
+checkResults :: (String, ProcessStatus) -> IO ()
+checkResults rc =
+       case rc of
+         Exited (ExitSuccess) -> return ()
+         Exited (ExitFailure x) -> 
+             fail $ cmd ++ ": exited with code " ++ show x
+         Terminated sig -> 
+             fail $ cmd ++ ": terminated by signal " ++ show sig
+         Stopped sig ->
+             fail $ cmd ++ ": stopped by signal " ++ show sig
+       
