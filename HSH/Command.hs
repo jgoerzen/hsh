@@ -18,10 +18,11 @@ Copyright (c) 2006-2007 John Goerzen, jgoerzen\@complete.org
 module HSH.Command (ShellCommand(..),
                     PipeCommand(..),
                     (-|-),
-                    run,
-                    runS,
-                    InvokeResult,
                     RunResult,
+                    run,
+                    InvokeResult,
+                    tryEC,
+                    catchEC,
                    ) where
 
 import System.Cmd.Utils hiding (pipeBoth)
@@ -39,6 +40,7 @@ import Data.Maybe
 import Data.List.Utils(uniq)
 import Control.Exception(evaluate)
 import System.Posix.Env
+import Text.Regex.Posix
 
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
@@ -315,3 +317,27 @@ checkResults rc =
          Stopped sig ->
              fail $ cmd ++ ": stopped by signal " ++ show sig
        
+{- | Handle an exception derived from a program exiting abnormally -}
+tryEC :: IO a -> IO (Either ProcessStatus a)
+tryEC action =
+    case try action of
+      Left ioe ->
+          if isUserError ioe then
+              case (ioeGetErrorString =~~ pat) of
+                Nothing -> ioError ioe -- not ours; re-raise it
+                Just e -> proc e
+    where pat = ": exited with code [0-9]+$|: terminated by signal ([0-9]+)$|: stopped by signal [0-9]+"
+          proc e 
+              | e =~ "^: exited" = Exited (ExitFailure (str2ec e))
+              | e =~ "^: terminated by signal" = Terminated (str2ec e)
+              | e =~ "^: stopped by signal" = Stopped (str2ec e)
+          str2ec e =
+              read (e =~ "[0-9]+$")
+
+{- | Catch an exception derived from a program exiting abnormally -}
+catchEC :: IO a -> (ProcessStatus -> IO a) -> IO a
+catchEC action handler =
+    do r <- tryEC action
+       case r of
+         Left ec -> handler ec
+         Right result -> return result
