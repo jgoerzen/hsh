@@ -1,0 +1,16 @@
+Source: haskell-hsh
+Priority: optional
+Maintainer: John Goerzen <jgoerzen@complete.org>
+Build-Depends: debhelper (>= 4.0.0), ghc6 (>= 6.6), ghc6 (<< 6.6-999), haskell-devscripts (>= 0.5.6), haddock, libghc6-mtl-dev, libghc6-missingh-dev, libghc6-hslogger-dev, libghc6-filepath-dev
+Standards-Version: 3.6.2
+Section: libs
+
+Package: libghc6-hsh-dev
+Section: libdevel
+Architecture: any
+Depends: ${haskell:Depends}, ${shlibs:Depends}, ${misc:Depends}, libghc6-mtl-dev, libghc6-hslogger-dev, libghc6-missingh-dev, libghc6-filepath-dev
+Description: Library to mix shell scripting with Haskell programs
+ HSH is designed to let you mix and match shell expressions with
+ Haskell programs. With HSH, it is possible to easily run shell
+ commands, capture their output or provide their input, and pipe them
+ to/from other shell commands and arbitrary Haskell functions at will.
