@@ -70,7 +70,8 @@ install: build
 #	$(MAKE) clean
 # We can't test PostgreSQL because the server may not be available for
 # the build user.
-#$(MAKE) test
+	$(MAKE) test
+	./setup haddock
 
 # Build architecture-independent files here.
 binary-indep: build install
