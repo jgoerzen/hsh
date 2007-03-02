@@ -1,6 +1,6 @@
 haskell-hsh (1.0.0) unstable; urgency=low
 
-  * Initial release.  Closes: #
+  * Initial release.  Closes: #413017.
 
  -- John Goerzen <jgoerzen@complete.org>  Thu,  1 Mar 2007 03:00:56 -0600
 
