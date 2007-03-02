@@ -23,13 +23,13 @@ programs.
 
 Here are a few examples to get you started:
 
->runS $ "echo /etc/pass*"
+>run $ "echo /etc/pass*" :: IO String
 > -> "/etc/passwd /etc/passwd-"
 >
->run $ "ls -l" -|- "wc -l"
+>run $ "ls -l" -|- "wc -l" :: IO ()
 > -> 12
 >
->run $ "ls -l" -|- wcL
+>run $ "ls -l" -|- wcL :: IO ()
 > -> 12
 
 wcL is a pure Haskell function defined in "HSH.ShellEquivs.wcL" as:
@@ -49,13 +49,16 @@ Here's another example:
 To use HSH, you\'ll just want to import the HSH module.  To learn more,
 please see the information in "HSH.Command" and "HSH.ShellEquivs".
 
-You can run a command with HSH in two ways:
+You can run a command with HSH in several ways:
 
- * By using 'run', which will leave the final standard output going
+ * By using 'run' in a context that expects IO (), which will leave
+   the final standard output going
    to the normal standard output of the program
 
- * By using 'runS', which will buffer the final standard output and
-   return it as a string at the completion of the command
+ * By using 'run' in a context that expects a String, which will
+   capture standard output into a buffer and present it as a String
+
+ * Any of the numerous other methods documented in 'RunResult'.
 
 You can then specify a command, which could be a single command or a command
 joined together with pipes.

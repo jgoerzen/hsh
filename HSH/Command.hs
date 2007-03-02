@@ -241,6 +241,8 @@ nullChildFunc = return ()
 
 -}
 class RunResult a where
+    {- | Runs a command (or pipe of commands), with results presented
+       in any number of different ways. -}
     run :: (ShellCommand b) => b -> a
 
 instance RunResult (IO ()) where
