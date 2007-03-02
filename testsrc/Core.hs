@@ -64,7 +64,13 @@ errortests =
      errcase "true|false" "(\"false\",[]): exited with code 1" $
                   "true" -|- ("false", []::[String]),
      errcase "sh80" "(\"sh\",[\"-c\",\"exit 80\"]): exited with code 80" $
-                  ("sh", ["-c", "exit 80"])
+                  ("sh", ["-c", "exit 80"]),
+     cmdcase "bfalse" False "false",
+     cmdcase "btrue" True "true",
+     cmdcase "b80" False ("sh", ["-c", "exit 80"]),
+     cmdcase "i80" (80::Int) ("sh", ["-c", "exit 80"]),
+     cmdcase "i0" (0::Int) "true",
+     cmdcase "i1" (1::Int) "false"
     ]
     where errcase name exp cmd =
               TestLabel name $ TestCase $ 
