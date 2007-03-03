@@ -20,6 +20,8 @@ module HSH.Command (ShellCommand(..),
                     (-|-),
                     RunResult,
                     run,
+                    runIO,
+                    runSL,
                     InvokeResult,
                     tryEC,
                     catchEC,
@@ -41,6 +43,8 @@ import Data.List.Utils(uniq)
 import Control.Exception(evaluate)
 import System.Posix.Env
 import Text.Regex.Posix
+import Control.Monad(when)
+import Data.String(rstrip)
 
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
@@ -348,3 +352,29 @@ catchEC action handler =
        case r of
          Left ec -> handler ec
          Right result -> return result
+
+{- | A convenience function.  Refers only to the version of 'run'
+that returns @IO ()@.  This prevents you from having to cast to it
+all the time when you do not care about the result of 'run'. 
+
+The implementation is simply:
+
+>runIO :: (ShellCommand a) => a -> IO ()
+>runIO = run
+-}
+runIO :: (ShellCommand a) => a -> IO ()
+runIO = run
+
+{- | Another convenience function.  This returns the first line of the output,
+with any trailing newlines or whitespace stripped off.  No leading whitespace
+is stripped.  This function will raise an exception if there is not at least
+one line of output.  Mnemonic: runSL means \"run single line\". 
+
+This command exists separately from 'run' because there is already a
+'run' instance that returns a String, though that instance returns the
+entirety of the output in that String. -}
+runSL :: (ShellCommand a) => a -> IO String
+runSL cmd =
+    do r <- run cmd
+       when (r == []) $ fail $ "runSL: no output received from " ++ show cmd
+       return (rstrip . head $ r)
