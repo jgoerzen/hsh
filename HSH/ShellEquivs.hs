@@ -141,7 +141,11 @@ abspath inp =
 {- | Return the destination that the given symlink points to.
 An alias for System.Posix.Files.readSymbolicLink -}
 readlink :: FilePath -> IO FilePath
-readlink = readSymbolicLink
+readlink fp = 
+    do issym <- isSymbolicLink fp
+       if issym
+           then readSymbolicLink fp
+           else return fp
 
 {- | As 'readlink', but turns the result into an absolute path. -}
 readlinkabs :: FilePath -> IO FilePath
