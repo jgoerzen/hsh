@@ -22,6 +22,7 @@ HSH entirely as well.
 
 module HSH.ShellEquivs(
                        abspath,
+                       appendTo,
                        basename,
                        dirname,
                        catFrom,
@@ -76,6 +77,12 @@ catFrom fplist inp =
 catTo :: FilePath -> String -> IO String
 catTo fp inp =
     do writeFile fp inp
+       return ""
+
+{- | Like 'catTo', but appends to the file. -}
+appendTo :: FilePath -> String -> IO String
+appendTo fp inp =
+    do appendFile fp inp
        return ""
 
 {- | Takes a string and sends it on as standard output.
