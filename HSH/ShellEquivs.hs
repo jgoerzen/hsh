@@ -150,11 +150,14 @@ readlink fp =
 {- | As 'readlink', but turns the result into an absolute path. -}
 readlinkabs :: FilePath -> IO FilePath
 readlinkabs inp = 
-    do rl <- readlink inp
-       case absNormPath (dirname inp) rl of
-         Nothing -> fail $ "Cannot make " ++ show rl ++ " absolute within " ++
-                    show (dirname inp)
-         Just x -> return x
+    do do issym <- (getFileStatus inp >>= return . isSymbolicLink)
+          if issym 
+             then do rl <- readlink inp
+                     case absNormPath (dirname inp) rl of
+                       Nothing -> fail $ "Cannot make " ++ show rl ++ " absolute within " ++
+                                  show (dirname inp)
+                       Just x -> return x
+             else abspath inp
 
 splitpath "" = (".", ".")
 splitpath "/" = ("/", "/")
