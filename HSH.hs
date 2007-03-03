@@ -42,7 +42,7 @@ Here's another example:
 > let countLines = (zipWith (\i line -> printf "%-5d %s" i line) 
 >      [(1::Int)..])::([String] -> [String])
 >
-> run $ ("ls", ["-l"]) -|- countLines -|- filter (isSuffixOf "hs")
+> runIO $ ("ls", ["-l"]) -|- countLines -|- filter (isSuffixOf "hs")
 >   6     -rw-r--r-- 1 jgoerzen jgoerzen  1285 Jun  6 09:43 HSH.hs
 >   11    -rw-r--r-- 1 jgoerzen jgoerzen   565 Jun  6 09:43 test.hs
 
@@ -59,6 +59,11 @@ You can run a command with HSH in several ways:
    capture standard output into a buffer and present it as a String
 
  * Any of the numerous other methods documented in 'RunResult'.
+
+ * The shortcut functions 'runIO' and 'runSL'.  'runIO' lets you run 
+   a command and force the context IO (), which is a frequently-useful
+   shortcut when you don't care about the result.  'runSL' grabs the
+   first line of output in the result.
 
 You can then specify a command, which could be a single command or a command
 joined together with pipes.
