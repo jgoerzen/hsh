@@ -142,7 +142,7 @@ abspath inp =
 An alias for System.Posix.Files.readSymbolicLink -}
 readlink :: FilePath -> IO FilePath
 readlink fp = 
-    do issym <- isSymbolicLink fp
+    do issym <- (getFileStatus fp >>= return . isSymbolicLink)
        if issym
            then readSymbolicLink fp
            else return fp
