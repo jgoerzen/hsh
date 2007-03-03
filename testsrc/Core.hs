@@ -33,15 +33,15 @@ pipes =
              lscmd -|- (map toUpper) -|- "grep BA",
      cmdcase "sh|s->s|s->s" "BAR\nBAZ\n" $
              lscmd -|- (map toUpper) -|- grep "BA",
-     cmdcase "s->s|sh" (map toUpper lsbase) $ catFromS lsbase -|- "tr a-z A-Z",
+     cmdcase "s->s|sh" (map toUpper lsbase) $ echo lsbase -|- "tr a-z A-Z",
      cmdcase "s->s|sh|sh" "BAR\nBAZ\n" $
-             catFromS lsbase -|- "tr a-z A-Z" -|- "grep BA",
+             echo lsbase -|- "tr a-z A-Z" -|- "grep BA",
      cmdcase "s->s|sh|s->s" "BAR\nBAZ\n" $
-             catFromS lsbase -|- "tr a-z A-Z" -|- grep "BA",
+             echo lsbase -|- "tr a-z A-Z" -|- grep "BA",
      cmdcase "s->s|s->s|sh" "BAR\nBAZ\n" $
-             catFromS lsbase -|- (map toUpper) -|- "grep BA",
+             echo lsbase -|- (map toUpper) -|- "grep BA",
      cmdcase "s->s|s->s|s->s" "BAR\nBAZ\n" $
-             catFromS lsbase -|- (map toUpper) -|- grep "BA",
+             echo lsbase -|- (map toUpper) -|- grep "BA",
      cmdcase "true" "0\n" $ "true" -|- "wc -l",
      cmdcase "true|true" "" $ "true" -|- "true",
      cmdcase "shell" "testsrc/testdata/bar\ntestsrc/testdata/baz\ntestsrc/testdata/foo\ntestsrc/testdata/quux\n" "ls testsrc/testdata/*"

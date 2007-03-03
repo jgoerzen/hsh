@@ -26,9 +26,9 @@ module HSH.ShellEquivs(
                        basename,
                        dirname,
                        catFrom,
-                       catFromS,
                        catTo,
                        cd,
+                       echo,
                        exit,
                        grep,
                        grepV,
@@ -88,8 +88,8 @@ appendTo fp inp =
 {- | Takes a string and sends it on as standard output.
 
 The input to this function is never read. -}
-catFromS :: String -> String -> String
-catFromS inp _ = inp
+echo :: String -> String -> String
+echo inp _ = inp
 
 {- | Takes input, writes it to all the specified files, and passes it on.
 

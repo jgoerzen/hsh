@@ -52,10 +52,10 @@ tcatFrom =
     where fn = "testsrc/testdata/foo"
           foo = "1234\n5678\n14\n"
 
-tcatFromS =
-    [cmdcase "basic" s $ catFromS s,
-     cmdcase "shcat" s $ catFromS s -|- "cat",
-     cmdcase "cat" s $ catFromS s -|- catFrom ["-"]
+techo =
+    [cmdcase "basic" s $ echo s,
+     cmdcase "shcat" s $ echo s -|- "cat",
+     cmdcase "cat" s $ echo s -|- catFrom ["-"]
     ]
     where s = "testfoobarbaz"
 
@@ -102,7 +102,7 @@ tests = TestList
          tl "basename" tbasename,
          tl "dirname" tdirname,
          tl "catFrom" tcatFrom,
-         tl "catFromS" tcatFromS,
+         tl "echo" techo,
          tl "catTo" tcatTo,
          tl "cd" tcd,
          tl "grep family" tgreps,
