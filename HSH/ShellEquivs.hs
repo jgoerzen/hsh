@@ -28,6 +28,7 @@ module HSH.ShellEquivs(
                        catFromS,
                        catTo,
                        cd,
+                       exit,
                        grep,
                        grepV,
                        egrep,
@@ -47,6 +48,7 @@ import Control.Exception(evaluate)
 import System.Directory
 import System.Posix.Files
 import System.Path
+import System.Exit
 
 {- | Load the specified files and display them, one at a time. 
 
@@ -175,3 +177,9 @@ basename = snd . splitpath
 {- | The directory part of a path -}
 dirname :: FilePath -> FilePath
 dirname = fst . splitpath
+
+{- | Exits with the specified error code. 0 indicates no error. -}
+exit :: Int -> IO a
+exit code 
+    | code == 0 = exitWith ExitSuccess
+    | otherwise = exitWith (ExitFailure code)
