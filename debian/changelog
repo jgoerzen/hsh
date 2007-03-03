@@ -1,3 +1,12 @@
+haskell-hsh (1.1.0) unstable; urgency=low
+
+  * Bumping version number (should have in 1.0.1 due to API change)
+  * New ShellEquivs commands: appendTo, exit
+  * New Commands helpers: runIO, runSL
+  * Fixes to readlink, readlinkabs
+
+ -- John Goerzen <jgoerzen@complete.org>  Sat,  3 Mar 2007 08:06:20 -0600
+
 haskell-hsh (1.0.1) unstable; urgency=low
 
   * New class to handle the different ways of invoking run.
