@@ -2,8 +2,17 @@ Name: HSH
 Version: 1.2.0
 License: LGPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
+Author: John Goerzen
 Stability: Beta
 Copyright: Copyright (c) 2006-2007 John Goerzen
+license-file: COPYRIGHT
+extra-source-files: COPYING
+homepage: http://software.complete.org/hsh
+Synopsis: Library to mix shell scripting with Haskell programs
+Description: HSH is designed to let you mix and match shell expressions with
+ Haskell programs. With HSH, it is possible to easily run shell
+ commands, capture their output or provide their input, and pipe them
+ to/from other shell commands and arbitrary Haskell functions at will.
 Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances
