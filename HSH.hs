@@ -26,11 +26,14 @@ Here are a few examples to get you started:
 >run $ "echo /etc/pass*" :: IO String
 > -> "/etc/passwd /etc/passwd-"
 >
->run $ "ls -l" -|- "wc -l" :: IO ()
+>runIO $ "ls -l" -|- "wc -l"
 > -> 12
 >
->run $ "ls -l" -|- wcL :: IO ()
+>runIO $ "ls -l" -|- wcL
 > -> 12
+>
+>runIO $ ("ls", ["-l", "file with spaces.txt"])
+>glob "~jgoerzen" >>= cd . head
 
 wcL is a pure Haskell function defined in "HSH.ShellEquivs.wcL" as:
 

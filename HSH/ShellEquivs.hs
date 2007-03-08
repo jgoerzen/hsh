@@ -24,6 +24,7 @@ module HSH.ShellEquivs(
                        abspath,
                        appendTo,
                        basename,
+                       bracketCD,
                        dirname,
                        catFrom,
                        catTo,
