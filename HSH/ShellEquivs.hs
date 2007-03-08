@@ -36,6 +36,7 @@ module HSH.ShellEquivs(
                        grepV,
                        egrep,
                        egrepV,
+                       mkdir,
                        pwd,
                        readlink,
                        readlinkabs,
@@ -48,9 +49,11 @@ import Data.List
 import Text.Regex
 import Control.Monad
 import Control.Exception(evaluate)
-import System.Directory
+import System.Directory hiding (createDirectory)
 import System.Posix.Files
 import System.Posix.User
+import System.Posix.Directory
+import System.Posix.Types
 import System.IO.Error
 import System.Path
 import System.Exit
@@ -239,3 +242,9 @@ even if the I/O action raised an exception.
 This is an alias for the MissingH function System.Path.bracketCWD. -}
 bracketCD :: FilePath -> IO a -> IO a
 bracketCD = bracketCWD
+
+{- | Creates the given directory.  A value of 0o755 for mode would be typical.
+An alias for System.Posix.Directory.createDirectory
+-}
+mkdir :: FilePath -> FileMode -> IO ()
+mkdir = createDirectory
