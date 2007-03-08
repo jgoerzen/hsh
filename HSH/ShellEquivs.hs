@@ -147,7 +147,8 @@ Want to change to a user\'s home directory?  Try this:
 
 > glob "~jgoerzen" >>= cd . head 
 
-See also 'bracketCD'
+See also 'bracketCD'.
+
 -}
 cd :: FilePath -> IO ()
 cd = setCurrentDirectory
@@ -236,10 +237,11 @@ glob inp@('~':remainder) =
 glob x = Glob.glob x
 
 {- | Changes the current working directory to the given path, executes
-the given I/O action, then changes back to the original directory,
-even if the I/O action raised an exception.
+the given I\/O action, then changes back to the original directory,
+even if the I\/O action raised an exception.
 
-This is an alias for the MissingH function System.Path.bracketCWD. -}
+This is an alias for the MissingH function System.Path.bracketCWD.
+-}
 bracketCD :: FilePath -> IO a -> IO a
 bracketCD = bracketCWD
 
