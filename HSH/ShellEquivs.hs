@@ -30,6 +30,7 @@ module HSH.ShellEquivs(
                        cd,
                        echo,
                        exit,
+                       glob,
                        grep,
                        grepV,
                        egrep,
@@ -48,8 +49,11 @@ import Control.Monad
 import Control.Exception(evaluate)
 import System.Directory
 import System.Posix.Files
+import System.Posix.User
+import System.IO.Error
 import System.Path
 import System.Exit
+import qualified System.Path.Glob as Glob
 
 {- | Load the specified files and display them, one at a time. 
 
@@ -133,7 +137,14 @@ wcL inp = [show $ genericLength inp]
 pwd :: IO FilePath
 pwd = getCurrentDirectory
 
-{- | An alias for System.Directory.setCurrentDirectory -}
+{- | An alias for System.Directory.setCurrentDirectory.
+
+Want to change to a user\'s home directory?  Try this: 
+
+> glob "~jgoerzen" >>= cd . head 
+
+See also 'bracketCD'
+-}
 cd :: FilePath -> IO ()
 cd = setCurrentDirectory
 
@@ -190,3 +201,40 @@ exit :: Int -> IO a
 exit code 
     | code == 0 = exitWith ExitSuccess
     | otherwise = exitWith (ExitFailure code)
+
+{- | Takes a pattern.  Returns a list of names that match that pattern.  
+Handles:
+
+>~username at beginning of file to expand to user's home dir
+>? matches exactly one character
+>* matches zero or more characters
+>[list] matches any character in list
+>[!list] matches any character not in list
+
+The result of a tilde expansion on a nonexistant username is to do no
+tilde expansion.
+
+The tilde with no username equates to the current user.
+
+Non-tilde expansion is done by the MissingH module System.Path.Glob.
+-}
+glob :: FilePath -> IO [FilePath]
+glob inp@('~':remainder) =
+    catch expanduser (\_ -> Glob.glob inp)
+    where (username, rest) = span (/= '/') remainder
+          expanduser = 
+              do lookupuser <- 
+                     if username /= "" 
+                        then return username
+                        else getEffectiveUserName
+                 ue <- getUserEntryForName lookupuser
+                 Glob.glob (homeDirectory ue ++ rest)
+glob x = Glob.glob x
+
+{- | Changes the current working directory to the given path, executes
+the given I/O action, then changes back to the original directory,
+even if the I/O action raised an exception.
+
+This is an alias for the MissingH function System.Path.bracketCWD. -}
+bracketCD :: FilePath -> IO a -> IO a
+bracketCD = bracketCWD
