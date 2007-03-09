@@ -7,6 +7,7 @@ haskell-hsh (1.2.1) unstable; urgency=low
 haskell-hsh (1.2.0) unstable; urgency=low
 
   * Renamed catFromS to echo.
+  * New commands mkdir, glob, bracketCD
 
  -- John Goerzen <jgoerzen@complete.org>  Sat,  3 Mar 2007 08:20:48 -0600
 
