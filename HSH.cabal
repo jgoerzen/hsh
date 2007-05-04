@@ -16,7 +16,7 @@ Description: HSH is designed to let you mix and match shell expressions with
 Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances
-Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.3, hslogger, FilePath, regex-base, regex-posix
+Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.3, hslogger, filepath, regex-base, regex-posix
 GHC-Options: -O2
 Category: System
 
