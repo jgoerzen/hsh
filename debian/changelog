@@ -1,3 +1,10 @@
+haskell-hsh (1.2.2) unstable; urgency=low
+
+  * Rebuild for newer MissingH.  Closes: #421452.
+  * Rebuild for newer FilePath.  Closes: #419194.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 03 May 2007 19:57:14 -0500
+
 haskell-hsh (1.2.1) unstable; urgency=low
 
   * Rebuild for newer MissingH.
