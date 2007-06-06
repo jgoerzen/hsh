@@ -1,3 +1,9 @@
+haskell-hsh (1.2.3) unstable; urgency=low
+
+  * Rebuild with newer GHC.
+
+ -- John Goerzen <jgoerzen@complete.org>  Wed, 06 Jun 2007 06:52:20 -0500
+
 haskell-hsh (1.2.2) unstable; urgency=low
 
   * Rebuild for newer MissingH.  Closes: #421452.
