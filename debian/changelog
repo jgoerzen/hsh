@@ -1,3 +1,9 @@
+haskell-hsh (1.2.4) unstable; urgency=low
+
+  * Rebuild for newer libs.  Closes: #429708, #432448, #430016.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 12 Jul 2007 03:21:30 -0500
+
 haskell-hsh (1.2.3) unstable; urgency=low
 
   * Rebuild with newer GHC.
