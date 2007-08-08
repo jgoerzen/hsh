@@ -17,12 +17,12 @@ Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances
 Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.3, hslogger, filepath, regex-base, regex-posix
-GHC-Options: -O2
+GHC-Options: -O2 -threaded
 Category: System
 
 Executable: runtests
-Buildable: False 
+Buildable: False
 Main-Is: runtests.hs
-HS-Source-Dir: testsrc
+HS-Source-Dirs: testsrc
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances

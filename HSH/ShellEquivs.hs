@@ -8,7 +8,7 @@ Please see the COPYRIGHT file
    Copyright  : Copyright (C) 2007 John Goerzen
    License    : GNU LGPL, version 2.1 or above
 
-   Maintainer : John Goerzen <jgoerzen@complete.org> 
+   Maintainer : John Goerzen <jgoerzen@complete.org>
    Stability  : provisional
    Portability: portable
 
@@ -44,11 +44,9 @@ module HSH.ShellEquivs(
                        wcL,
                       ) where
 
-import HSH.Command
 import Data.List
 import Text.Regex
 import Control.Monad
-import Control.Exception(evaluate)
 import System.Directory hiding (createDirectory)
 import System.Posix.Files
 import System.Posix.User
@@ -59,16 +57,16 @@ import System.Path
 import System.Exit
 import qualified System.Path.Glob as Glob
 
-{- | Load the specified files and display them, one at a time. 
+{- | Load the specified files and display them, one at a time.
 
 The special file @-@ means to display the input.
 
 If it is not given, no input is read.
 
 Unlike the shell cat, @-@ may be given twice.  However, if it is, you
-will be forcing Haskell to buffer the input. 
+will be forcing Haskell to buffer the input.
 
-Note: buffering behavior here is untested. 
+Note: buffering behavior here is untested.
 -}
 catFrom :: [FilePath] -> String -> IO String
 catFrom fplist inp =
@@ -80,7 +78,7 @@ catFrom fplist inp =
                     fn -> do c <- readFile fn
                              return (accum ++ c)
 
-{- | Takes input, writes it to the specified file, and does not pass it on. 
+{- | Takes input, writes it to the specified file, and does not pass it on.
      See also 'tee'. -}
 catTo :: FilePath -> String -> IO String
 catTo fp inp =
@@ -96,12 +94,12 @@ appendTo fp inp =
 {- | Takes a string and sends it on as standard output.
 
 The input to this function is never read. -}
-echo :: String -> String -> String
-echo inp _ = inp
+echo :: String -> String
+echo = id
 
 {- | Takes input, writes it to all the specified files, and passes it on.
 
-This function buffers the input. 
+This function buffers the input.
 
 See also 'catFrom'. -}
 tee :: [FilePath] -> String -> IO String
@@ -135,7 +133,7 @@ egrepV pat = filter (not . ismatch regex)
 
 {- | Count number of lines.  wc -l -}
 wcL :: [String] -> [String]
-wcL inp = [show $ genericLength inp]
+wcL inp = [show (genericLength inp :: Integer)]
 
 {- | An alias for System.Directory.getCurrentDirectory -}
 pwd :: IO FilePath
@@ -143,9 +141,9 @@ pwd = getCurrentDirectory
 
 {- | An alias for System.Directory.setCurrentDirectory.
 
-Want to change to a user\'s home directory?  Try this: 
+Want to change to a user\'s home directory?  Try this:
 
-> glob "~jgoerzen" >>= cd . head 
+> glob "~jgoerzen" >>= cd . head
 
 See also 'bracketCD'.
 
@@ -166,7 +164,7 @@ abspath inp =
 {- | Return the destination that the given symlink points to.
 An alias for System.Posix.Files.readSymbolicLink -}
 readlink :: FilePath -> IO FilePath
-readlink fp = 
+readlink fp =
     do issym <- (getFileStatus fp >>= return . isSymbolicLink)
        if issym
            then readSymbolicLink fp
@@ -174,9 +172,9 @@ readlink fp =
 
 {- | As 'readlink', but turns the result into an absolute path. -}
 readlinkabs :: FilePath -> IO FilePath
-readlinkabs inp = 
+readlinkabs inp =
     do do issym <- (getFileStatus inp >>= return . isSymbolicLink)
-          if issym 
+          if issym
              then do rl <- readlink inp
                      case absNormPath (dirname inp) rl of
                        Nothing -> fail $ "Cannot make " ++ show rl ++ " absolute within " ++
@@ -184,9 +182,10 @@ readlinkabs inp =
                        Just x -> return x
              else abspath inp
 
+splitpath :: String -> (String, String)
 splitpath "" = (".", ".")
 splitpath "/" = ("/", "/")
-splitpath p 
+splitpath p
     | last p == '/' = splitpath (init p)
     | not ('/' `elem` p) = (".", p)
     | head p == '/' && length (filter (== '/') p) == 1 = ("/", tail p)
@@ -203,11 +202,11 @@ dirname = fst . splitpath
 
 {- | Exits with the specified error code. 0 indicates no error. -}
 exit :: Int -> IO a
-exit code 
+exit code
     | code == 0 = exitWith ExitSuccess
     | otherwise = exitWith (ExitFailure code)
 
-{- | Takes a pattern.  Returns a list of names that match that pattern.  
+{- | Takes a pattern.  Returns a list of names that match that pattern.
 Handles:
 
 >~username at beginning of file to expand to user's home dir
@@ -227,9 +226,9 @@ glob :: FilePath -> IO [FilePath]
 glob inp@('~':remainder) =
     catch expanduser (\_ -> Glob.glob inp)
     where (username, rest) = span (/= '/') remainder
-          expanduser = 
-              do lookupuser <- 
-                     if username /= "" 
+          expanduser =
+              do lookupuser <-
+                     if username /= ""
                         then return username
                         else getEffectiveUserName
                  ue <- getUserEntryForName lookupuser

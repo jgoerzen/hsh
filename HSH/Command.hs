@@ -8,7 +8,7 @@ Please see the COPYRIGHT file
    Copyright  : Copyright (C) 2006-2007 John Goerzen
    License    : GNU LGPL, version 2.1 or above
 
-   Maintainer : John Goerzen <jgoerzen@complete.org> 
+   Maintainer : John Goerzen <jgoerzen@complete.org>
    Stability  : provisional
    Portability: portable
 
@@ -27,9 +27,8 @@ module HSH.Command (ShellCommand(..),
                     catchEC,
                    ) where
 
-import System.Cmd.Utils hiding (pipeBoth)
-import System.IO.HVIO
-import System.IO.Utils
+-- import System.IO.HVIO
+-- import System.IO.Utils
 import System.IO
 import System.Exit
 import System.Posix.Types
@@ -46,6 +45,7 @@ import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String(rstrip)
 
+d, dr :: String -> IO ()
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
 
@@ -54,7 +54,7 @@ type InvokeResult = (String, IO ProcessStatus)
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
-commands must define these methods. 
+commands must define these methods.
 
 Minimum implementation is 'fdInvoke'.
 -}
@@ -71,7 +71,7 @@ instance Show (String -> String) where
     show _ = "(String -> String)"
 instance Show (String -> IO String) where
     show _ = "(String -> IO String)"
-  
+
 instance ShellCommand (String -> IO String) where
     fdInvoke func fstdin fstdout childclosefds childfunc =
         do -- d $ "SIOSF: Before fork"
@@ -141,7 +141,7 @@ instance ShellCommand ([String] -> IO [String]) where
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand (String, [String]) where
-    fdInvoke pc@(cmd, args) fstdin fstdout childclosefds childfunc = 
+    fdInvoke pc@(cmd, args) fstdin fstdout childclosefds childfunc =
         do d $ "S Before fork for " ++ show pc
            p <- try (forkProcess childstuff)
            pid <- case p of
@@ -149,11 +149,11 @@ instance ShellCommand (String, [String]) where
                     Left x -> fail $ "Error in fork: " ++ show x
            d $ "SP New pid " ++ show pid ++ " for " ++ show pc
            return $ seq pid pid
-           return [(show (cmd, args), 
+           return [(show (cmd, args),
                    getProcessStatus True False pid >>=
                                         (return . forceMaybe))]
-           
-        where 
+
+        where
               childstuff = do d $ "SC preparing to redir"
                               d $ "SC input is on " ++ show fstdin
                               d $ "SC output is on " ++ show fstdout
@@ -167,14 +167,15 @@ instance ShellCommand (String, [String]) where
 {- | An instance of 'ShellCommand' for an external command.  The
 String is split using words to the command to run, and the arguments, if any. -}
 instance ShellCommand String where
-    fdInvoke cmdline ifd ofd closefd forkfunc = 
+    fdInvoke cmdline ifd ofd closefd forkfunc =
         do esh <- getEnv "SHELL"
            let sh = case esh of
                       Nothing -> "/bin/sh"
                       Just x -> x
            fdInvoke (sh, ["-c", cmdline]) ifd ofd closefd forkfunc
 
-redir fromfd tofd 
+redir :: Fd -> Fd -> IO ()
+redir fromfd tofd
     | fromfd == tofd = do d $ "ignoring identical redir " ++ show fromfd
                           return ()
     | otherwise = do d $ "running dupTo " ++ show (fromfd, tofd)
@@ -185,18 +186,18 @@ closefds :: [Fd]                   -- ^ List of Fds to possibly close
          -> [Fd]                   -- ^ List of Fds to not touch, ever
          -> IO ()
 closefds inpclosefds noclosefds =
-    do d $ "closefds " ++ show closefds ++ " " ++ show noclosefds
-       mapM_ closeit . filter (\x -> not (x `elem` noclosefds)) $ closefds
+    do d $ "closefds " ++ show uclosefds ++ " " ++ show noclosefds
+       mapM_ closeit . filter (\x -> not (x `elem` noclosefds)) $ uclosefds
     where closeit fd = do d $ "Closing fd " ++ show fd
                           closeFd fd
-          closefds = uniq inpclosefds
+          uclosefds = uniq inpclosefds
 
 data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
    deriving Show
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout childclosefds forkfunc = 
+    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout childclosefds forkfunc =
         do d $ "*** Handling pipe: " ++ show pc
            (reader, writer) <- createPipe
            let allfdstoclose = reader : writer : fstdin : fstdout : childclosefds
@@ -205,25 +206,21 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
            res2 <- fdInvoke cmd2 reader fstdout allfdstoclose forkfunc
            d $ "pipe fdInvoke: Parent closing " ++ show [reader, writer]
            mapM_ closeFd [reader, writer]
-           
+
            d $ "*** Done handling pipe " ++ show pc
            return $ res1 ++ res2
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
-(-|-) = PipeCommand 
-
-{- | Function to use when there is nothing for the parent to do -}
-nullParentFunc :: IO ()
-nullParentFunc = return ()
+(-|-) = PipeCommand
 
 {- | Function to use when there is nothing for the child to do -}
 nullChildFunc :: IO ()
 nullChildFunc = return ()
 
-{- | Different ways to get data from 'run'. 
+{- | Different ways to get data from 'run'.
 
- * IO () runs, throws an exception on error, and sends stdout to stdout 
+ * IO () runs, throws an exception on error, and sends stdout to stdout
 
  * IO String runs, throws an exception on error, reads stdout into
    a buffer, and returns it as a string.
@@ -231,7 +228,7 @@ nullChildFunc = return ()
  * IO [String] is same as IO String, but returns the results as lines
 
  * IO ProcessStatus runs and returns a ProcessStatus with the exit
-   information.  stdout is sent to stdout.  Exceptions are not thrown. 
+   information.  stdout is sent to stdout.  Exceptions are not thrown.
 
  * IO (String, ProcessStatus) is like IO ProcessStatus, but also
    includes a description of the last command in the pipe to have
@@ -240,7 +237,7 @@ nullChildFunc = return ()
  * IO Int returns the exit code from a program directly.  If a signal
    caused the command to be reaped, returns 128 + SIGNUM.
 
- * IO Bool returns True if the program exited normally (exit code 0, 
+ * IO Bool returns True if the program exited normally (exit code 0,
    not stopped by a signal) and False otherwise.
 
 -}
@@ -267,7 +264,7 @@ instance RunResult (IO Int) where
                    Exited (ExitFailure x) -> return x
                    Terminated x -> return (128 + (fromIntegral x))
                    Stopped x -> return (128 + (fromIntegral x))
-                 
+
 instance RunResult (IO Bool) where
     run cmd = do rc <- run cmd
                  return ((rc::Int) == 0)
@@ -299,13 +296,13 @@ instance RunResult (IO String) where
 
 {- | Evaluates the result codes and returns an overall status -}
 processResults :: [InvokeResult] -> IO (String, ProcessStatus)
-processResults r = 
+processResults r =
     do rc <- mapM procresult r
        case catMaybes rc of
          [] -> return (fst (last r), Exited (ExitSuccess))
          x -> return (last x)
     where procresult :: InvokeResult -> IO (Maybe (String, ProcessStatus))
-          procresult (cmd, action) = 
+          procresult (cmd, action) =
               do rc <- action
                  return $ case rc of
                    Exited (ExitSuccess) -> Nothing
@@ -316,13 +313,13 @@ checkResults :: (String, ProcessStatus) -> IO ()
 checkResults (cmd, ps) =
        case ps of
          Exited (ExitSuccess) -> return ()
-         Exited (ExitFailure x) -> 
+         Exited (ExitFailure x) ->
              fail $ cmd ++ ": exited with code " ++ show x
-         Terminated sig -> 
+         Terminated sig ->
              fail $ cmd ++ ": terminated by signal " ++ show sig
          Stopped sig ->
              fail $ cmd ++ ": stopped by signal " ++ show sig
-       
+
 {- | Handle an exception derived from a program exiting abnormally -}
 tryEC :: IO a -> IO (Either ProcessStatus a)
 tryEC action =
@@ -337,7 +334,7 @@ tryEC action =
          Right result -> return (Right result)
     where pat = ": exited with code [0-9]+$|: terminated by signal ([0-9]+)$|: stopped by signal [0-9]+"
           proc :: String -> ProcessStatus
-          proc e 
+          proc e
               | e =~ "^: exited" = Exited (ExitFailure (str2ec e))
               | e =~ "^: terminated by signal" = Terminated (str2ec e)
               | e =~ "^: stopped by signal" = Stopped (str2ec e)
@@ -355,7 +352,7 @@ catchEC action handler =
 
 {- | A convenience function.  Refers only to the version of 'run'
 that returns @IO ()@.  This prevents you from having to cast to it
-all the time when you do not care about the result of 'run'. 
+all the time when you do not care about the result of 'run'.
 
 The implementation is simply:
 
@@ -368,7 +365,7 @@ runIO = run
 {- | Another convenience function.  This returns the first line of the output,
 with any trailing newlines or whitespace stripped off.  No leading whitespace
 is stripped.  This function will raise an exception if there is not at least
-one line of output.  Mnemonic: runSL means \"run single line\". 
+one line of output.  Mnemonic: runSL means \"run single line\".
 
 This command exists separately from 'run' because there is already a
 'run' instance that returns a String, though that instance returns the
