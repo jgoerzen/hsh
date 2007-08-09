@@ -109,7 +109,7 @@ tee (x:xs) inp = do writeFile x inp
 
 {- | Search for the string in the lines.  Return those that match. -}
 grep :: String -> [String] -> [String]
-grep needle = filter (isInfixOf needle)
+grep = filter . isInfixOf
 
 {- | Search for the string in the lines.  Return those that do NOT match. -}
 grepV :: String -> [String] -> [String]
@@ -173,7 +173,7 @@ readlink fp =
 {- | As 'readlink', but turns the result into an absolute path. -}
 readlinkabs :: FilePath -> IO FilePath
 readlinkabs inp =
-    do do issym <- (getFileStatus inp >>= return . isSymbolicLink)
+       do issym <- (getFileStatus inp >>= return . isSymbolicLink)
           if issym
              then do rl <- readlink inp
                      case absNormPath (dirname inp) rl of
