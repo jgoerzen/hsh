@@ -59,20 +59,19 @@ module HSH.ShellEquivs(
                        uniq,
                       ) where
 
-import Data.List
-import Data.Char
-import Text.Regex
+import Data.List (genericIndex, genericLength, intersperse, isInfixOf, nub)
+import Data.Char (toLower, toUpper)
+import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
-import Control.Monad
+import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
-import System.Posix.Files
-import System.Posix.User
-import System.Posix.Directory
-import System.Posix.Types
-import System.IO.Error
-import System.Path
+import System.Posix.Files (getFileStatus, isSymbolicLink, readSymbolicLink)
+import System.Posix.User (getEffectiveUserName, getUserEntryForName, homeDirectory)
+import System.Posix.Directory (createDirectory)
+import System.Posix.Types (FileMode())
+import System.Path (absNormPath, bracketCWD)
 import System.Exit
-import qualified System.Path.Glob as Glob
+import qualified System.Path.Glob as Glob (glob)
 
 {- | Return the absolute path of the arg.  Raises an error if the
 computation is impossible. -}
@@ -84,7 +83,6 @@ abspath inp =
                     show p
          Just x -> return x
 
-
 {- | The filename part of a path -}
 basename :: FilePath -> FilePath
 basename = snd . splitpath
@@ -92,7 +90,6 @@ basename = snd . splitpath
 {- | The directory part of a path -}
 dirname :: FilePath -> FilePath
 dirname = fst . splitpath
-
 
 {- | Changes the current working directory to the given path, executes
 the given I\/O action, then changes back to the original directory,
@@ -136,7 +133,6 @@ appendTo :: FilePath -> String -> IO String
 appendTo fp inp =
     do appendFile fp inp
        return ""
-
 
 {- | An alias for System.Directory.setCurrentDirectory.
 
@@ -214,7 +210,6 @@ grep = filter . isInfixOf
 {- | Search for the string in the lines.  Return those that do NOT match. -}
 grepV :: String -> [String] -> [String]
 grepV needle = filter (not . isInfixOf needle)
-
 
 {- | Creates the given directory.  A value of 0o755 for mode would be typical.
 An alias for System.Posix.Directory.createDirectory
@@ -304,14 +299,12 @@ joinLines = return . concat
 numberLines :: [String] -> [String]
 numberLines = zipWith (printf "%3d %s") [(1::Int)..]
 
-
 -- | Reverse characters on each line (rev)
 rev, rev_w :: [String] -> [String]
 rev = map reverse
 
 -- | Reverse words on each line
 rev_w = map (unwords . reverse . words)
-
 
 -- | Double space a file
 space, unspace :: [String] -> [String]
@@ -320,12 +313,10 @@ space = intersperse ""
 -- | Inverse of double space; drop spaces
 unspace = filter (not . null)
 
-
 -- | Convert a string to all upper or lower case
 lower, upper :: String -> String
 lower = map toLower
 upper = map toUpper
-
 
 {- | Reverse lines in a String (like Unix tac).
 See uniq. -}
