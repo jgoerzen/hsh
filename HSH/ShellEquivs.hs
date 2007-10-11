@@ -54,6 +54,7 @@ module HSH.ShellEquivs(
                        tee,
                        tr,
                        trd,
+                       wcW,
                        wcL,
                        uniq,
                       ) where
@@ -284,6 +285,8 @@ split c s = case rest of
 	      _:rst -> chunk : split c rst
     where (chunk, rest) = break (==c) s
 
+-- | Count number of words in a file (like wc -w)
+wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
 
 {- | Split a list by a given character and select the nth list.
    > cut ' ' 2 "foo bar baz quux" -> "bar" -}
