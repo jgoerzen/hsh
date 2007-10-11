@@ -25,10 +25,12 @@ module HSH.ShellEquivs(
                        appendTo,
                        basename,
                        bracketCD,
-                       dirname,
                        catFrom,
                        catTo,
                        cd,
+                       cut,
+                       cutR,
+                       dirname,
                        echo,
                        exit,
                        glob,
@@ -36,16 +38,30 @@ module HSH.ShellEquivs(
                        grepV,
                        egrep,
                        egrepV,
+                       joinLines,
+                       lower,
+                       upper,
                        mkdir,
+                       numberLines,
                        pwd,
                        readlink,
                        readlinkabs,
+                       rev,
+                       rev_w,
+                       space,
+                       unspace,
+                       tac,
                        tee,
+                       tr,
+                       trd,
                        wcL,
+                       uniq,
                       ) where
 
 import Data.List
+import Data.Char
 import Text.Regex
+import Text.Printf (printf)
 import Control.Monad
 import System.Directory hiding (createDirectory)
 import System.Posix.Files
@@ -134,6 +150,15 @@ egrepV pat = filter (not . ismatch regex)
 {- | Count number of lines.  wc -l -}
 wcL :: [String] -> [String]
 wcL inp = [show (genericLength inp :: Integer)]
+
+{- wc_l, wc_w :: String -> String
+
+-- Count number of lines in a file, like wc -l
+wc_l = showln . genericLength . lines
+
+-- Count number of words in a file (like wc -w)
+wc_w = showln . genericLength . words
+-}
 
 {- | An alias for System.Directory.getCurrentDirectory -}
 pwd :: IO FilePath
@@ -249,3 +274,78 @@ An alias for System.Posix.Directory.createDirectory
 -}
 mkdir :: FilePath -> FileMode -> IO ()
 mkdir = createDirectory
+
+
+{- Utility function.
+> split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
+split :: Char -> String -> [String]
+split c s = case rest of
+	      []     -> [chunk]
+	      _:rst -> chunk : split c rst
+    where (chunk, rest) = break (==c) s
+
+
+{- | Split a list by a given character and select the nth list.
+   > cut ' ' 2 "foo bar baz quux" -> "bar" -}
+cut :: Integer -> Char -> String -> String
+cut pos = flip cutR [pos]
+
+{- | Split a list by a given character and select ranges of the resultant lists.
+   > cutR ' ' [2..4] "foo bar baz quux foobar" -> "bar baz quux"
+   Notes:
+   * Needs to handle too large and too small indexes.
+   * Might be better to use a Map, but that makes the function much longer for marginal
+   performance benefit. -}
+cutR :: Char -> [Integer] -> String -> String
+cutR delim ns y = concat $ intersperse [delim] $ map (\z -> string `genericIndex` (z - 1)) ns
+    where string = split delim y
+
+-- | Join lines of a file
+joinLines :: [String] -> [String]
+joinLines = return . concat
+
+-- | Number each line of a file
+numberLines :: [String] -> [String]
+numberLines = zipWith (printf "%3d %s") [(1::Int)..]
+
+
+-- | Reverse characters on each line (rev)
+rev, rev_w :: [String] -> [String]
+rev = map reverse
+
+-- | Reverse words on each line
+rev_w = map (unwords . reverse . words)
+
+
+-- | Double space a file
+space, unspace :: [String] -> [String]
+space = intersperse ""
+
+-- | Inverse of double space; drop spaces
+unspace = filter (not . null)
+
+
+-- | Convert a string to all upper or lower case
+lower, upper :: String -> String
+lower = map toLower
+upper = map toUpper
+
+
+{- | Reverse lines in a String (like Unix tac).
+See uniq. -}
+tac :: String -> String
+tac = unlines . reverse . lines
+
+-- | Translate c character x to y, like tr 'e' 'f' (or y// in sed)
+-- tr :: Char -> Char -> IO ()
+tr :: Char -> Char -> String -> String
+tr a b = map (\x -> if x == a then b else x)
+
+-- | Delete specified character in a string.
+trd :: Char -> String -> String
+trd = filter . (/=)
+
+{- | Remove duplicate lines from a file (like Unix uniq).
+Takes a String representing a file or output and plugs it through lines and then nub to uniqify on a line basis. -}
+uniq :: String -> String
+uniq = unlines . nub . lines
