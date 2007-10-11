@@ -74,6 +74,35 @@ import System.Path
 import System.Exit
 import qualified System.Path.Glob as Glob
 
+{- | Return the absolute path of the arg.  Raises an error if the
+computation is impossible. -}
+abspath :: FilePath -> IO FilePath
+abspath inp =
+    do p <- pwd
+       case absNormPath p inp of
+         Nothing -> fail $ "Cannot make " ++ show inp ++ " absolute within " ++
+                    show p
+         Just x -> return x
+
+
+{- | The filename part of a path -}
+basename :: FilePath -> FilePath
+basename = snd . splitpath
+
+{- | The directory part of a path -}
+dirname :: FilePath -> FilePath
+dirname = fst . splitpath
+
+
+{- | Changes the current working directory to the given path, executes
+the given I\/O action, then changes back to the original directory,
+even if the I\/O action raised an exception.
+
+This is an alias for the MissingH function System.Path.bracketCWD.
+-}
+bracketCD :: FilePath -> IO a -> IO a
+bracketCD = bracketCWD
+
 {- | Load the specified files and display them, one at a time.
 
 The special file @-@ means to display the input.
@@ -108,29 +137,24 @@ appendTo fp inp =
     do appendFile fp inp
        return ""
 
+
+{- | An alias for System.Directory.setCurrentDirectory.
+
+Want to change to a user\'s home directory?  Try this:
+
+> glob "~jgoerzen" >>= cd . head
+
+See also 'bracketCD'.
+
+-}
+cd :: FilePath -> IO ()
+cd = setCurrentDirectory
+
 {- | Takes a string and sends it on as standard output.
 
 The input to this function is never read. -}
 echo :: String -> String
 echo = id
-
-{- | Takes input, writes it to all the specified files, and passes it on.
-
-This function buffers the input.
-
-See also 'catFrom'. -}
-tee :: [FilePath] -> String -> IO String
-tee [] inp = return inp
-tee (x:xs) inp = do writeFile x inp
-                    tee xs inp
-
-{- | Search for the string in the lines.  Return those that match. -}
-grep :: String -> [String] -> [String]
-grep = filter . isInfixOf
-
-{- | Search for the string in the lines.  Return those that do NOT match. -}
-grepV :: String -> [String] -> [String]
-grepV needle = filter (not . isInfixOf needle)
 
 {- | Search for the regexp in the lines.  Return those that match. -}
 egrep :: String -> [String] -> [String]
@@ -147,84 +171,6 @@ egrepV pat = filter (not . ismatch regex)
           ismatch r inp = case matchRegex r inp of
                             Nothing -> False
                             Just _ -> True
-
-{- | Count number of lines.  wc -l -}
-wcL :: [String] -> [String]
-wcL inp = [show (genericLength inp :: Integer)]
-
-{- wc_l, wc_w :: String -> String
-
--- Count number of lines in a file, like wc -l
-wc_l = showln . genericLength . lines
-
--- Count number of words in a file (like wc -w)
-wc_w = showln . genericLength . words
--}
-
-{- | An alias for System.Directory.getCurrentDirectory -}
-pwd :: IO FilePath
-pwd = getCurrentDirectory
-
-{- | An alias for System.Directory.setCurrentDirectory.
-
-Want to change to a user\'s home directory?  Try this:
-
-> glob "~jgoerzen" >>= cd . head
-
-See also 'bracketCD'.
-
--}
-cd :: FilePath -> IO ()
-cd = setCurrentDirectory
-
-{- | Return the absolute path of the arg.  Raises an error if the
-computation is impossible. -}
-abspath :: FilePath -> IO FilePath
-abspath inp =
-    do p <- pwd
-       case absNormPath p inp of
-         Nothing -> fail $ "Cannot make " ++ show inp ++ " absolute within " ++
-                    show p
-         Just x -> return x
-
-{- | Return the destination that the given symlink points to.
-An alias for System.Posix.Files.readSymbolicLink -}
-readlink :: FilePath -> IO FilePath
-readlink fp =
-    do issym <- (getFileStatus fp >>= return . isSymbolicLink)
-       if issym
-           then readSymbolicLink fp
-           else return fp
-
-{- | As 'readlink', but turns the result into an absolute path. -}
-readlinkabs :: FilePath -> IO FilePath
-readlinkabs inp =
-       do issym <- (getFileStatus inp >>= return . isSymbolicLink)
-          if issym
-             then do rl <- readlink inp
-                     case absNormPath (dirname inp) rl of
-                       Nothing -> fail $ "Cannot make " ++ show rl ++ " absolute within " ++
-                                  show (dirname inp)
-                       Just x -> return x
-             else abspath inp
-
-splitpath :: String -> (String, String)
-splitpath "" = (".", ".")
-splitpath "/" = ("/", "/")
-splitpath p
-    | last p == '/' = splitpath (init p)
-    | not ('/' `elem` p) = (".", p)
-    | head p == '/' && length (filter (== '/') p) == 1 = ("/", tail p)
-    | otherwise = (\(base, dir) -> (reverse (tail dir), reverse base))
-        (break (== '/') (reverse p))
-
-{- | The filename part of a path -}
-basename :: FilePath -> FilePath
-basename = snd . splitpath
-
-{- | The directory part of a path -}
-dirname :: FilePath -> FilePath
-dirname = fst . splitpath
 
 {- | Exits with the specified error code. 0 indicates no error. -}
 exit :: Int -> IO a
@@ -261,14 +207,14 @@ glob inp@('~':remainder) =
                  Glob.glob (homeDirectory ue ++ rest)
 glob x = Glob.glob x
 
-{- | Changes the current working directory to the given path, executes
-the given I\/O action, then changes back to the original directory,
-even if the I\/O action raised an exception.
+{- | Search for the string in the lines.  Return those that match. -}
+grep :: String -> [String] -> [String]
+grep = filter . isInfixOf
 
-This is an alias for the MissingH function System.Path.bracketCWD.
--}
-bracketCD :: FilePath -> IO a -> IO a
-bracketCD = bracketCWD
+{- | Search for the string in the lines.  Return those that do NOT match. -}
+grepV :: String -> [String] -> [String]
+grepV needle = filter (not . isInfixOf needle)
+
 
 {- | Creates the given directory.  A value of 0o755 for mode would be typical.
 An alias for System.Posix.Directory.createDirectory
@@ -276,14 +222,54 @@ An alias for System.Posix.Directory.createDirectory
 mkdir :: FilePath -> FileMode -> IO ()
 mkdir = createDirectory
 
+{- | An alias for System.Directory.getCurrentDirectory -}
+pwd :: IO FilePath
+pwd = getCurrentDirectory
 
-{- Utility function.
-> split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
-split :: Char -> String -> [String]
-split c s = case rest of
-	      []     -> [chunk]
-	      _:rst -> chunk : split c rst
-    where (chunk, rest) = break (==c) s
+{- | Return the destination that the given symlink points to.
+An alias for System.Posix.Files.readSymbolicLink -}
+readlink :: FilePath -> IO FilePath
+readlink fp =
+    do issym <- (getFileStatus fp >>= return . isSymbolicLink)
+       if issym
+           then readSymbolicLink fp
+           else return fp
+
+{- | As 'readlink', but turns the result into an absolute path. -}
+readlinkabs :: FilePath -> IO FilePath
+readlinkabs inp =
+       do issym <- (getFileStatus inp >>= return . isSymbolicLink)
+          if issym
+             then do rl <- readlink inp
+                     case absNormPath (dirname inp) rl of
+                       Nothing -> fail $ "Cannot make " ++ show rl ++ " absolute within " ++
+                                  show (dirname inp)
+                       Just x -> return x
+             else abspath inp
+
+splitpath :: String -> (String, String)
+splitpath "" = (".", ".")
+splitpath "/" = ("/", "/")
+splitpath p
+    | last p == '/' = splitpath (init p)
+    | not ('/' `elem` p) = (".", p)
+    | head p == '/' && length (filter (== '/') p) == 1 = ("/", tail p)
+    | otherwise = (\(base, dir) -> (reverse (tail dir), reverse base))
+        (break (== '/') (reverse p))
+
+{- | Takes input, writes it to all the specified files, and passes it on.
+
+This function buffers the input.
+
+See also 'catFrom'. -}
+tee :: [FilePath] -> String -> IO String
+tee [] inp = return inp
+tee (x:xs) inp = do writeFile x inp
+                    tee xs inp
+
+{- | Count number of lines.  wc -l -}
+wcL, wcW :: [String] -> [String]
+wcL inp = [show (genericLength inp :: Integer)]
 
 -- | Count number of words in a file (like wc -w)
 wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
@@ -302,6 +288,13 @@ cut pos = flip cutR [pos]
 cutR :: Char -> [Integer] -> String -> String
 cutR delim ns y = concat $ intersperse [delim] $ map (\z -> string `genericIndex` (z - 1)) ns
     where string = split delim y
+          {- Utility function.
+             > split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
+          split :: Char -> String -> [String]
+          split c s = case rest of
+	                   []     -> [chunk]
+	                   _:rst -> chunk : split c rst
+                    where (chunk, rest) = break (==c) s
 
 -- | Join lines of a file
 joinLines :: [String] -> [String]
