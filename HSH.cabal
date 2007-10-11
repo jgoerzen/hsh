@@ -17,7 +17,7 @@ Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances
 Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.3, hslogger, filepath, regex-base, regex-posix
-GHC-Options: -O2 -threaded
+GHC-Options: -O2 -threaded -Wall
 Category: System
 
 Executable: runtests
