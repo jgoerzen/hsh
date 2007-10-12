@@ -59,7 +59,7 @@ module HSH.ShellEquivs(
                        uniq,
                       ) where
 
-import Data.List (genericIndex, genericLength, intersperse, isInfixOf, nub)
+import Data.List (genericLength, intersperse, isInfixOf, nub)
 import Data.Char (toLower, toUpper)
 import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
@@ -272,24 +272,26 @@ wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
 {- | Split a list by a given character and select the nth list.
    > cut ' ' 2 "foo bar baz quux" -> "bar" -}
 cut :: Integer -> Char -> String -> String
-cut pos = flip cutR [pos]
+cut pos = cutR [pos]
 
 {- | Split a list by a given character and select ranges of the resultant lists.
-   > cutR ' ' [2..4] "foo bar baz quux foobar" -> "bar baz quux"
+   > cutR [2..4] ' ' "foo bar baz quux foobar" -> "baz quux foobar"
    Notes:
-   * Needs to handle too large and too small indexes.
-   * Might be better to use a Map, but that makes the function much longer for marginal
-   performance benefit. -}
-cutR :: Char -> [Integer] -> String -> String
-cutR delim ns y = concat $ intersperse [delim] $ map (\z -> string `genericIndex` (z - 1)) ns
-    where string = split delim y
-          {- Utility function.
-             > split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
-          split :: Char -> String -> [String]
-          split c s = case rest of
-	                   []     -> [chunk]
-	                   _:rst -> chunk : split c rst
-                    where (chunk, rest) = break (==c) s
+   * Needs to handle too large and too small indexes. -}
+-- zipWith (-) ns (0:ns).  use drop as your lookup function
+--  (indexWithDefault x xs n) will give x if n is out of bounds
+cutR :: [Integer] -> Char -> String -> String
+cutR nums delim z = drop 1 $ concat [delim:x | (x, y) <- zip string [0..], elem y nums]
+     where string = split delim z
+
+{- Utility function.
+> split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
+split :: Char -> String -> [String]
+split del = foldr f [[]]
+    where f _ [] = [""]
+          f x rest@(r:rs)
+              | x == del  = [] : rest
+              | otherwise   = (x : r) : rs
 
 -- | Join lines of a file
 joinLines :: [String] -> [String]
