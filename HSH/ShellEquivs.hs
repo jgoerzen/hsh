@@ -83,27 +83,31 @@ abspath inp =
                     show p
          Just x -> return x
 
--- | The filename part of a path
+{- | The filename part of a path -}
 basename :: FilePath -> FilePath
 basename = snd . splitpath
 
--- | The directory part of a path
+{- | The directory part of a path -}
 dirname :: FilePath -> FilePath
 dirname = fst . splitpath
 
 {- | Changes the current working directory to the given path, executes
 the given I\/O action, then changes back to the original directory,
 even if the I\/O action raised an exception.
+
 This is an alias for the MissingH function System.Path.bracketCWD. -}
 bracketCD :: FilePath -> IO a -> IO a
 bracketCD = bracketCWD
 
 {- | Load the specified files and display them, one at a time.
-The special file @-@ means to display the input.
-If it is not given, no input is read.
+
+The special file @-@ means to display the input.  If it is not given,
+no input is read.
+
 Unlike the shell cat, @-@ may be given twice.  However, if it is, you
 will be forcing Haskell to buffer the input.
-Note: buffering behavior here is untested. -}
+
+Note: buffering behavior here is untested.  -}
 catFrom :: [FilePath] -> String -> IO String
 catFrom fplist inp =
     do r <- foldM foldfunc "" fplist
@@ -121,14 +125,16 @@ catTo fp inp =
     do writeFile fp inp
        return ""
 
--- | Like 'catTo', but appends to the file.
+{- | Like 'catTo', but appends to the file. -}
 appendTo :: FilePath -> String -> IO String
 appendTo fp inp =
     do appendFile fp inp
        return ""
 
 {- | An alias for System.Directory.setCurrentDirectory.
+
 Want to change to a user\'s home directory?  Try this:
+
 > glob "~jgoerzen" >>= cd . head
 
 See also 'bracketCD'.
@@ -137,25 +143,31 @@ cd :: FilePath -> IO ()
 cd = setCurrentDirectory
 
 {- | Split a list by a given character and select the nth list.
-   > cut ' ' 2 "foo bar baz quux" -> "bar" -}
+
+> cut ' ' 2 "foo bar baz quux" -> "bar"
+-}
 cut :: Integer -> Char -> String -> String
 cut pos = cutR [pos]
 
 {- | Split a list by a given character and select ranges of the resultant lists.
-   > cutR [2..4] ' ' "foo bar baz quux foobar" -> "baz quux foobar"
-   > cutR [1..1000] ' ' "foo bar baz quux foobar" -> "bar baz quux foobar"
-   > cutR [-1000..1000] ' ' "foo bar baz quux foobar" -> "foo bar baz quux foobar"
-   Note that too large and too small indices are essentially ignored. -}
+
+> cutR [2..4] ' ' "foo bar baz quux foobar" -> "baz quux foobar"
+> cutR [1..1000] ' ' "foo bar baz quux foobar" -> "bar baz quux foobar"
+> cutR [-1000..1000] ' ' "foo bar baz quux foobar" -> "foo bar baz quux foobar"
+
+   Note that too large and too small indices are essentially ignored.
+-}
 cutR :: [Integer] -> Char -> String -> String
 cutR nums delim z = drop 1 $ concat [delim:x | (x, y) <- zip string [0..], elem y nums]
      where string = split delim z
 
 {- | Takes a string and sends it on as standard output.
-The input to this function is never read. -}
-echo :: String -> String
-echo = id
 
--- | Search for the regexp in the lines.  Return those that match.
+The input to this function is never read. -}
+echo :: String -> String -> String
+echo inp _ = inp
+
+{- | Search for the regexp in the lines.  Return those that match. -}
 egrep :: String -> [String] -> [String]
 egrep pat = filter (ismatch regex)
     where regex = mkRegex pat
@@ -163,7 +175,7 @@ egrep pat = filter (ismatch regex)
                             Nothing -> False
                             Just _ -> True
 
--- | Search for the regexp in the lines.  Return those that do NOT match.
+{- | Search for the regexp in the lines.  Return those that do NOT match. -}
 egrepV :: String -> [String] -> [String]
 egrepV pat = filter (not . ismatch regex)
     where regex = mkRegex pat
@@ -171,7 +183,7 @@ egrepV pat = filter (not . ismatch regex)
                             Nothing -> False
                             Just _ -> True
 
--- | Exits with the specified error code. 0 indicates no error.
+{- | Exits with the specified error code. 0 indicates no error. -}
 exit :: Int -> IO a
 exit code
     | code == 0 = exitWith ExitSuccess
@@ -205,11 +217,15 @@ glob inp@('~':remainder) =
                  Glob.glob (homeDirectory ue ++ rest)
 glob x = Glob.glob x
 
--- | Search for the string in the lines.  Return those that match.
+{- | Search for the string in the lines.  Return those that match.
+Same as:
+
+> grep needle = filter (isInfixOf needle)
+-}
 grep :: String -> [String] -> [String]
 grep = filter . isInfixOf
 
--- | Search for the string in the lines.  Return those that do NOT match.
+{- | Search for the string in the lines.  Return those that do NOT match. -}
 grepV :: String -> [String] -> [String]
 grepV needle = filter (not . isInfixOf needle)
 
@@ -218,19 +234,21 @@ joinLines :: [String] -> [String]
 joinLines = return . concat
 
 {- | Creates the given directory.  A value of 0o755 for mode would be typical.
+
 An alias for System.Posix.Directory.createDirectory. -}
 mkdir :: FilePath -> FileMode -> IO ()
 mkdir = createDirectory
 
--- | Number each line of a file
+{- | Number each line of a file -}
 numberLines :: [String] -> [String]
 numberLines = zipWith (printf "%3d %s") [(1::Int)..]
 
--- | An alias for System.Directory.getCurrentDirectory.
+{- | An alias for System.Directory.getCurrentDirectory. -}
 pwd :: IO FilePath
 pwd = getCurrentDirectory
 
 {- | Return the destination that the given symlink points to.
+
 An alias for System.Posix.Files.readSymbolicLink -}
 readlink :: FilePath -> IO FilePath
 readlink fp =
@@ -239,7 +257,7 @@ readlink fp =
            then readSymbolicLink fp
            else return fp
 
--- | As 'readlink', but turns the result into an absolute path.
+{- | As 'readlink', but turns the result into an absolute path. -}
 readlinkabs :: FilePath -> IO FilePath
 readlinkabs inp =
        do issym <- (getFileStatus inp >>= return . isSymbolicLink)
@@ -251,73 +269,64 @@ readlinkabs inp =
                        Just x -> return x
              else abspath inp
 
--- | Reverse characters on each line (rev)
-rev, rev_w :: [String] -> [String]
+{- | Reverse characters on each line (rev) -}
+rev, revW :: [String] -> [String]
 rev = map reverse
 
--- | Reverse words on each line
-rev_w = map (unwords . reverse . words)
-
-{- Utility function.
-> split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
-split :: Char -> String -> [String]
-split del = foldr f [[]]
-    where f _ [] = [""]
-          f x rest@(r:rs)
-              | x == del  = [] : rest
-              | otherwise   = (x : r) : rs
-
--- TODO: Perhaps simplify to make use of split
-splitpath :: String -> (String, String)
-splitpath "" = (".", ".")
-splitpath "/" = ("/", "/")
-splitpath p
-    | last p == '/' = splitpath (init p)
-    | not ('/' `elem` p) = (".", p)
-    | head p == '/' && length (filter (== '/') p) == 1 = ("/", tail p)
-    | otherwise = (\(base, dir) -> (reverse (tail dir), reverse base))
-        (break (== '/') (reverse p))
+{- | Reverse words on each line -}
+revW = map (unwords . reverse . words)
 
 {- | Reverse lines in a String (like Unix tac).
-See uniq. -}
-tac :: String -> String
-tac = unlines . reverse . lines
+
+Implemented as:
+
+> tac = reverse
+
+See 'uniq'. -}
+tac :: [String] -> [String]
+tac = reverse
 
 {- | Takes input, writes it to all the specified files, and passes it on.
 This function buffers the input.
+
 See also 'catFrom'. -}
 tee :: [FilePath] -> String -> IO String
 tee [] inp = return inp
 tee (x:xs) inp = writeFile x inp >> tee xs inp
 
--- | Translate c character x to y, like tr 'e' 'f' (or y// in sed)
+{- | Translate c character x to y, like:
+
+>tr 'e' 'f'
+
+(or y// in sed) -}
 tr :: Char -> Char -> String -> String
 tr a b = map (\x -> if x == a then b else x)
 
--- | Delete specified character in a string.
+{- | Delete specified character in a string. -}
 trd :: Char -> String -> String
 trd = filter . (/=)
 
 {- | Remove duplicate lines from a file (like Unix uniq).
+ 
 Takes a String representing a file or output and plugs it through lines and then nub to uniqify on a line basis. -}
 uniq :: String -> String
 uniq = unlines . nub . lines
 
--- | Double space a file
+{- | Double space a file -}
 space, unspace :: [String] -> [String]
 space = intersperse ""
 
--- | Inverse of double space; drop spaces
+{- | Inverse of double space; drop empty lines -}
 unspace = filter (not . null)
 
--- | Convert a string to all upper or lower case
+{- | Convert a string to all upper or lower case -}
 lower, upper :: String -> String
 lower = map toLower
 upper = map toUpper
 
--- | Count number of lines.  wc -l
+{- | Count number of lines.  wc -l -}
 wcL, wcW :: [String] -> [String]
 wcL inp = [show (genericLength inp :: Integer)]
 
--- | Count number of words in a file (like wc -w)
+{- | Count number of words in a file (like wc -w) -}
 wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
