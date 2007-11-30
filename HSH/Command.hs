@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances #-}
+
 {- Commands for HSH
 Copyright (C) 2004-2007 John Goerzen <jgoerzen@complete.org>
 Please see the COPYRIGHT file
@@ -43,7 +45,7 @@ import Control.Exception(evaluate)
 import System.Posix.Env
 import Text.Regex.Posix
 import Control.Monad(when)
-import Data.String(rstrip)
+import Data.MissingHString(rstrip)
 
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
