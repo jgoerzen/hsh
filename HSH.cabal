@@ -16,7 +16,7 @@ Description: HSH is designed to let you mix and match shell expressions with
 Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances
-Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.3, hslogger, filepath, regex-base, regex-posix
+Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.3, hslogger, filepath, regex-base, regex-posix, directory
 GHC-Options: -O2 -threaded -Wall
 Category: System
 
@@ -24,5 +24,4 @@ Executable: runtests
 Buildable: False
 Main-Is: runtests.hs
 HS-Source-Dirs: testsrc
-Extensions: ExistentialQuantification, OverlappingInstances,
-    UndecidableInstances
+Extensions: ExistentialQuantification, OverlappingInstances, UndecidableInstances
