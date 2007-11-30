@@ -47,7 +47,7 @@ module HSH.ShellEquivs(
                        readlink,
                        readlinkabs,
                        rev,
-                       revW,
+                       rev_w,
                        space,
                        unspace,
                        tac,
@@ -65,7 +65,6 @@ import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
-import System.FilePath (splitPath)
 import System.Posix.Files (getFileStatus, isSymbolicLink, readSymbolicLink)
 import System.Posix.User (getEffectiveUserName, getUserEntryForName, homeDirectory)
 import System.Posix.Directory (createDirectory)
@@ -86,11 +85,11 @@ abspath inp =
 
 {- | The filename part of a path -}
 basename :: FilePath -> FilePath
-basename =  last . splitPath
+basename = snd . splitpath
 
 {- | The directory part of a path -}
 dirname :: FilePath -> FilePath
-dirname = concat . init . splitPath
+dirname = fst . splitpath
 
 {- | Changes the current working directory to the given path, executes
 the given I\/O action, then changes back to the original directory,
@@ -309,7 +308,7 @@ trd :: Char -> String -> String
 trd = filter . (/=)
 
 {- | Remove duplicate lines from a file (like Unix uniq).
-
+ 
 Takes a String representing a file or output and plugs it through lines and then nub to uniqify on a line basis. -}
 uniq :: String -> String
 uniq = unlines . nub . lines
@@ -332,11 +331,3 @@ wcL inp = [show (genericLength inp :: Integer)]
 
 {- | Count number of words in a file (like wc -w) -}
 wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
-
-{- Utility function.
-> split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
-split :: Char -> String -> [String]
-split c s = case rest of
-              []     -> [chunk]
-              _:rst -> chunk : split c rst
-    where (chunk, rest) = break (==c) s
