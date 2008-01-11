@@ -65,6 +65,7 @@ import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
+-- import System.FilePath (splitPath)
 import System.Posix.Files (getFileStatus, isSymbolicLink, readSymbolicLink)
 import System.Posix.User (getEffectiveUserName, getUserEntryForName, homeDirectory)
 import System.Posix.Directory (createDirectory)
@@ -85,7 +86,7 @@ abspath inp =
 
 {- | The filename part of a path -}
 basename :: FilePath -> FilePath
-basename = snd . splitpath
+basename =  snd . splitpath
 
 {- | The directory part of a path -}
 dirname :: FilePath -> FilePath
@@ -331,3 +332,22 @@ wcL inp = [show (genericLength inp :: Integer)]
 
 {- | Count number of words in a file (like wc -w) -}
 wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
+
+{- Utility function.
+> split ' ' "foo bar baz" -> ["foo","bar","baz"] -}
+split :: Char -> String -> [String]
+split c s = case rest of
+              []     -> [chunk]
+              _:rst -> chunk : split c rst
+    where (chunk, rest) = break (==c) s
+
+-- TODO: Perhaps simplify to make use of split
+splitpath :: String -> (String, String)
+splitpath "" = (".", ".")
+splitpath "/" = ("/", "/")
+splitpath p
+    | last p == '/' = splitpath (init p)
+    | not ('/' `elem` p) = (".", p)
+    | head p == '/' && length (filter (== '/') p) == 1 = ("/", tail p)
+    | otherwise = (\(base, dir) -> (reverse (tail dir), reverse base))
+        (break (== '/') (reverse p))
