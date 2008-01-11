@@ -47,7 +47,7 @@ module HSH.ShellEquivs(
                        readlink,
                        readlinkabs,
                        rev,
-                       rev_w,
+                       revW,
                        space,
                        unspace,
                        tac,
@@ -309,7 +309,7 @@ trd :: Char -> String -> String
 trd = filter . (/=)
 
 {- | Remove duplicate lines from a file (like Unix uniq).
- 
+
 Takes a String representing a file or output and plugs it through lines and then nub to uniqify on a line basis. -}
 uniq :: String -> String
 uniq = unlines . nub . lines
