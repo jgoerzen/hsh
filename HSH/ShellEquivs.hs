@@ -1,18 +1,18 @@
 {- Shell Equivalents
-Copyright (C) 2004-2007 John Goerzen <jgoerzen@complete.org>
+Copyright (C) 2004-2008 John Goerzen <jgoerzen@complete.org>
 Please see the COPYRIGHT file
 -}
 
 {- |
    Module     : HSH.ShellEquivs
-   Copyright  : Copyright (C) 2007 John Goerzen
+   Copyright  : Copyright (C) 2008 John Goerzen
    License    : GNU LGPL, version 2.1 or above
 
    Maintainer : John Goerzen <jgoerzen@complete.org>
    Stability  : provisional
    Portability: portable
 
-Copyright (c) 2006-2007 John Goerzen, jgoerzen\@complete.org
+Copyright (c) 2006-2008 John Goerzen, jgoerzen\@complete.org
 
 This module provides shell-like commands.  Most, but not all, are designed
 to be used directly as part of a HSH pipeline.  All may be used outside
@@ -295,11 +295,13 @@ tee :: [FilePath] -> String -> IO String
 tee [] inp = return inp
 tee (x:xs) inp = writeFile x inp >> tee xs inp
 
-{- | Translate c character x to y, like:
+{- | Translate a character x to y, like:
 
 >tr 'e' 'f'
 
-(or @y//@ in sed)
+Or, in sed,
+
+>y//
  -}
 tr :: Char -> Char -> String -> String
 tr a b = map (\x -> if x == a then b else x)
