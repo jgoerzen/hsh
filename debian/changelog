@@ -1,3 +1,9 @@
+haskell-hsh (1.2.5.0) unstable; urgency=low
+
+  * Updates for GHC 6.8 and 6.8 libs.   
+
+ -- John Goerzen <jgoerzen@complete.org>  Fri, 11 Jan 2008 03:59:19 -0600
+
 haskell-hsh (1.2.4) unstable; urgency=low
 
   * Rebuild for newer libs.  Closes: #429708, #432448, #430016.
