@@ -299,7 +299,8 @@ tee (x:xs) inp = writeFile x inp >> tee xs inp
 
 >tr 'e' 'f'
 
-(or y// in sed) -}
+(or @y//@ in sed)
+ -}
 tr :: Char -> Char -> String -> String
 tr a b = map (\x -> if x == a then b else x)
 

@@ -1,10 +1,10 @@
 Name: HSH
-Version: 1.2.4
+Version: 1.2.5
 License: LGPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
 Author: John Goerzen
 Stability: Beta
-Copyright: Copyright (c) 2006-2007 John Goerzen
+Copyright: Copyright (c) 2006-2008 John Goerzen
 license-file: COPYRIGHT
 extra-source-files: COPYING
 homepage: http://software.complete.org/hsh
@@ -16,7 +16,7 @@ Description: HSH is designed to let you mix and match shell expressions with
 Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
 Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances
-Build-Depends: base, unix, mtl, regex-compat, MissingH>=0.18.3, hslogger, filepath, regex-base, regex-posix, directory
+Build-Depends: base, unix, mtl, regex-compat, MissingH>=1.0.0, hslogger, filepath, regex-base, regex-posix, directory
 GHC-Options: -O2 -threaded -Wall
 Category: System
 

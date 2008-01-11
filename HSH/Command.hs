@@ -1,13 +1,13 @@
 {-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances #-}
 
 {- Commands for HSH
-Copyright (C) 2004-2007 John Goerzen <jgoerzen@complete.org>
+Copyright (C) 2004-2008 John Goerzen <jgoerzen@complete.org>
 Please see the COPYRIGHT file
 -}
 
 {- |
    Module     : HSH.Command
-   Copyright  : Copyright (C) 2006-2007 John Goerzen
+   Copyright  : Copyright (C) 2006-2008 John Goerzen
    License    : GNU LGPL, version 2.1 or above
 
    Maintainer : John Goerzen <jgoerzen@complete.org>
@@ -45,7 +45,7 @@ import Control.Exception(evaluate)
 import System.Posix.Env
 import Text.Regex.Posix
 import Control.Monad(when)
-import Data.MissingHString(rstrip)
+import Data.String.Utils(rstrip)
 
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
