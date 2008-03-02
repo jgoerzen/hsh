@@ -1,3 +1,9 @@
+haskell-hsh (1.2.5.2) unstable; urgency=low
+
+  * Rebuild against newer hslogger.  Closes: #468961.
+
+ -- John Goerzen <jgoerzen@complete.org>  Sun, 02 Mar 2008 11:29:56 -0600
+
 haskell-hsh (1.2.5.1) unstable; urgency=low
 
   * Rebuild wiht newer regexp.
