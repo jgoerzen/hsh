@@ -26,6 +26,7 @@ module HSH.ShellEquivs(
                        basename,
                        bracketCD,
                        catFrom,
+                       catFromBS,
                        catTo,
                        catToBS,
                        cd,
@@ -110,16 +111,26 @@ no input is read.
 Unlike the shell cat, @-@ may be given twice.  However, if it is, you
 will be forcing Haskell to buffer the input.
 
-Note: buffering behavior here is untested.  -}
+Note: buffering behavior here is untested. 
+
+See also 'catFromBS'. -}
 catFrom :: [FilePath] -> String -> IO String
-catFrom fplist inp =
-    do r <- foldM foldfunc "" fplist
+catFrom = genericCatFrom readFile (++) ""
+
+{- | Lazy ByteString version of 'catFrom'.  This may have performance
+benefits. -}
+catFromBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+catFromBS = genericCatFrom BSL.readFile BSL.append BSL.empty
+
+genericCatFrom :: (FilePath -> IO a) -> (a -> a -> a) -> a ->  [FilePath] -> a -> IO a
+genericCatFrom readfilefunc appendfunc empty fplist inp =
+    do r <- foldM foldfunc empty fplist
        return r
     where foldfunc accum fp =
                   case fp of
-                    "-" -> return (accum ++ inp)
-                    fn -> do c <- readFile fn
-                             return (accum ++ c)
+                    "-" -> return (appendfunc accum inp)
+                    fn -> do c <- readfilefunc fn
+                             return (appendfunc accum c)
 
 {- | Takes input, writes it to the specified file, and does not pass it on.
      The return value is the empty string.  See also 'catToBS', 'tee'.  -}
