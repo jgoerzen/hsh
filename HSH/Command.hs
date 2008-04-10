@@ -75,7 +75,18 @@ instance Show (String -> IO String) where
     show _ = "(String -> IO String)"
 
 instance ShellCommand (String -> IO String) where
-    fdInvoke func fstdin fstdout childclosefds childfunc =
+    fdInvoke = genericStringlikeIO hGetContents hPutStr
+
+genericStringlikeIO :: (Show (a -> IO a)) => 
+                       (Handle -> IO a) 
+                    -> (Handle -> a -> IO ()) 
+                    -> (a -> IO a) 
+                    -> Fd
+                    -> Fd 
+                    -> [Fd] 
+                    -> (IO ()) 
+                    -> IO [InvokeResult]
+genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefds childfunc =
         do -- d $ "SIOSF: Before fork"
            p <- try (forkProcess childstuff)
            pid <- case p of
@@ -95,11 +106,11 @@ instance ShellCommand (String -> IO String) where
                               d $ "SIOSFC Running child func"
                               childfunc
                               d $ "SIOSFC Running func in child"
-                              contents <- hGetContents hr
+                              contents <- getcontentsfunc hr
                               d $ "SIOSFC Contents read"
                               result <- func contents
                               d $ "SIOSFC Func applied"
-                              hPutStr hw result
+                              hputstrfunc hw result
                               d $ "SIOSFC Func done, closing handles."
                               hClose hr
                               hClose hw
