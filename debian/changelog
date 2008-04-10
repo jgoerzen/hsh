@@ -1,3 +1,9 @@
+haskell-hsh (1.2.6.0) unstable; urgency=low
+
+  * Now support ByteString for many operations.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 10 Apr 2008 17:47:34 -0500
+
 haskell-hsh (1.2.5.2) unstable; urgency=low
 
   * Rebuild against newer hslogger.  Closes: #468961.
