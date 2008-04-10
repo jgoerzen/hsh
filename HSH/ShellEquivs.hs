@@ -34,6 +34,7 @@ module HSH.ShellEquivs(
                        cutR,
                        dirname,
                        echo,
+                       echoBS,
                        exit,
                        glob,
                        grep,
@@ -54,6 +55,7 @@ module HSH.ShellEquivs(
                        unspace,
                        tac,
                        tee,
+                       teeBS,
                        tr,
                        trd,
                        wcW,
@@ -184,9 +186,15 @@ cutR nums delim z = drop 1 $ concat [delim:x | (x, y) <- zip string [0..], elem 
 
 {- | Takes a string and sends it on as standard output.
 
-The input to this function is never read. -}
+The input to this function is never read.
+
+See also 'echoBS'. -}
 echo :: String -> String -> String
 echo inp _ = inp
+
+{- | ByteString.Lazy version of 'echo'. -}
+echoBS :: BSL.ByteString -> BSL.ByteString -> BSL.ByteString
+echoBS inp _ = inp
 
 {- | Search for the regexp in the lines.  Return those that match. -}
 egrep :: String -> [String] -> [String]
@@ -310,10 +318,15 @@ tac = reverse
 {- | Takes input, writes it to all the specified files, and passes it on.
 This function buffers the input.
 
-See also 'catFrom'. -}
+See also 'teeBS', 'catFrom'. -}
 tee :: [FilePath] -> String -> IO String
 tee [] inp = return inp
 tee (x:xs) inp = writeFile x inp >> tee xs inp
+
+{- | Lazy ByteString version of 'tee'. -}
+teeBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+teeBS [] inp = return inp
+teeBS (x:xs) inp = BSL.writeFile x inp >> teeBS xs inp
 
 {- | Translate a character x to y, like:
 
