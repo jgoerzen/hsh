@@ -27,6 +27,7 @@ module HSH.ShellEquivs(
                        bracketCD,
                        catFrom,
                        catTo,
+                       catToBS,
                        cd,
                        cut,
                        cutR,
@@ -73,6 +74,7 @@ import System.Posix.Types (FileMode())
 import System.Path (absNormPath, bracketCWD)
 import System.Exit
 import qualified System.Path.Glob as Glob (glob)
+import qualified Data.ByteString.Lazy as BSL
 
 {- | Return the absolute path of the arg.  Raises an error if the
 computation is impossible. -}
@@ -120,11 +122,18 @@ catFrom fplist inp =
                              return (accum ++ c)
 
 {- | Takes input, writes it to the specified file, and does not pass it on.
-     See also 'tee'. -}
+     The return value is the empty string.  See also 'catToBS', 'tee'.  -}
 catTo :: FilePath -> String -> IO String
 catTo fp inp =
     do writeFile fp inp
        return ""
+
+{- | Like 'catTo', but operates in a lazy ByteString.  This could be a
+performance benefit. -}
+catToBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
+catToBS fp inp =
+    do BSL.writeFile fp inp
+       return (BSL.empty)
 
 {- | Like 'catTo', but appends to the file. -}
 appendTo :: FilePath -> String -> IO String
