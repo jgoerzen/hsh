@@ -53,7 +53,8 @@ d, dr :: String -> IO ()
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
 
-{- | Result type for shell commands -}
+{- | Result type for shell commands.  The String is the text description of
+the command, not its output. -}
 type InvokeResult = (String, IO ProcessStatus)
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
@@ -264,9 +265,10 @@ nullChildFunc = return ()
  * IO () runs, throws an exception on error, and sends stdout to stdout
 
  * IO String runs, throws an exception on error, reads stdout into
-   a buffer, and returns it as a string.
+   a buffer, and returns it as a string.  Note: This output is not lazy.
 
- * IO [String] is same as IO String, but returns the results as lines
+ * IO [String] is same as IO String, but returns the results as lines.
+   Note: this output is not lazy.
 
  * IO ProcessStatus runs and returns a ProcessStatus with the exit
    information.  stdout is sent to stdout.  Exceptions are not thrown.
@@ -275,12 +277,17 @@ nullChildFunc = return ()
    includes a description of the last command in the pipe to have
    an error (or the last command, if there was no error)
 
+ * IO ByteString and IO (ByteString, ProcessStatus) are similar to their
+   String counterparts.
+
  * IO Int returns the exit code from a program directly.  If a signal
    caused the command to be reaped, returns 128 + SIGNUM.
 
  * IO Bool returns True if the program exited normally (exit code 0,
    not stopped by a signal) and False otherwise.
 
+To address insufficient laziness, you can process anything that needs to be
+processed lazily within the pipeline itself.
 -}
 class RunResult a where
     {- | Runs a command (or pipe of commands), with results presented
@@ -315,7 +322,25 @@ instance RunResult (IO [String]) where
                  return (lines r)
 
 instance RunResult (IO String) where
-    run cmd =
+    run cmd = genericStringlikeResult hGetContents (\c -> evaluate (length c))
+              cmd
+
+instance RunResult (IO BSL.ByteString) where
+    run cmd = genericStringlikeResult BSL.hGetContents 
+              (\c -> evaluate (BSL.length c))
+              cmd
+
+instance RunResult (IO BS.ByteString) where
+    run cmd = genericStringlikeResult BS.hGetContents
+              (\c -> evaluate (BS.length c))
+              cmd
+
+genericStringlikeResult :: ShellCommand b => 
+                           (Handle -> IO a)
+                        -> (a -> IO c)
+                        -> b 
+                        -> IO a
+genericStringlikeResult hgetcontentsfunc evalfunc cmd =
         do (pread, pwrite) <- createPipe
            -- d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
            -- d "runS 1"
@@ -325,9 +350,10 @@ instance RunResult (IO String) where
            -- d "runS 3"
            hread <- fdToHandle pread
            -- d "runS 4"
-           c <- hGetContents hread
+           c <- hgetcontentsfunc hread
            -- d "runS 5"
-           evaluate (length c)
+           evalfunc c
+           --evaluate (length c)
            -- d "runS 6"
            hClose hread
            -- d "runS 7"
