@@ -20,6 +20,7 @@ Build-Depends: base, unix, mtl, regex-compat, MissingH>=1.0.0,
  hslogger, filepath, regex-base, regex-posix, directory, bytestring
 GHC-Options: -O2 -threaded -Wall
 Category: System
+Build-type: Simple
 
 Executable: runtests
 Buildable: False
