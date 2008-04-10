@@ -46,6 +46,8 @@ import System.Posix.Env
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString as BS
 
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
@@ -73,9 +75,44 @@ instance Show (String -> String) where
     show _ = "(String -> String)"
 instance Show (String -> IO String) where
     show _ = "(String -> IO String)"
+instance Show (BSL.ByteString -> BSL.ByteString) where
+    show _ = "(Data.ByteString.Lazy.ByteString -> Data.ByteString.Lazy.ByteString)"
+instance Show (BSL.ByteString -> IO BSL.ByteString) where
+    show _ = "(Data.ByteString.Lazy.ByteString -> IO Data.ByteString.Lazy.ByteString)"
+instance Show (BS.ByteString -> BS.ByteString) where
+    show _ = "(Data.ByteString.ByteString -> Data.ByteString.ByteString)"
+instance Show (BS.ByteString -> IO BS.ByteString) where
+    show _ = "(Data.ByteString.ByteString -> IO Data.ByteString.ByteString)"
 
 instance ShellCommand (String -> IO String) where
     fdInvoke = genericStringlikeIO hGetContents hPutStr
+
+instance ShellCommand (BSL.ByteString -> IO BSL.ByteString) where
+    fdInvoke = genericStringlikeIO BSL.hGetContents BSL.hPut
+
+instance ShellCommand (BS.ByteString -> IO BS.ByteString) where
+    fdInvoke = genericStringlikeIO BS.hGetContents BS.hPut
+
+{- | An instance of 'ShellCommand' for a pure Haskell function mapping
+String to String.  Implement in terms of (String -> IO String) for
+simplicity. -}
+instance ShellCommand (String -> String) where
+    fdInvoke func =
+        fdInvoke iofunc
+            where iofunc :: String -> IO String
+                  iofunc = return . func
+
+instance ShellCommand (BSL.ByteString -> BSL.ByteString) where
+    fdInvoke func =
+        fdInvoke iofunc
+            where iofunc :: BSL.ByteString -> IO BSL.ByteString
+                  iofunc = return . func
+
+instance ShellCommand (BS.ByteString -> BS.ByteString) where
+    fdInvoke func =
+        fdInvoke iofunc
+            where iofunc :: BS.ByteString -> IO BS.ByteString
+                  iofunc = return . func
 
 genericStringlikeIO :: (Show (a -> IO a)) => 
                        (Handle -> IO a) 
@@ -117,15 +154,6 @@ genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefd
                               d $ "SIOSFC Child exiting."
                               -- It hung here without the exitImmediately
                               --exitImmediately ExitSuccess
-
-{- | An instance of 'ShellCommand' for a pure Haskell function mapping
-String to String.  Implement in terms of (String -> IO String) for
-simplicity. -}
-instance ShellCommand (String -> String) where
-    fdInvoke func fstdin fstdout childclosefds childfunc =
-        fdInvoke iofunc fstdin fstdout childclosefds childfunc
-            where iofunc :: String -> IO String
-                  iofunc = return . func
 
 instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
