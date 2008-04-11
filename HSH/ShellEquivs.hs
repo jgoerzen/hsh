@@ -78,6 +78,7 @@ import System.Posix.Directory (createDirectory)
 import System.Posix.Types (FileMode())
 import System.Path (absNormPath, bracketCWD)
 import System.Exit
+import System.IO
 import qualified System.Path.Glob as Glob (glob)
 import qualified Data.ByteString.Lazy as BSL
 
