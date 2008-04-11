@@ -29,6 +29,8 @@ module HSH.ShellEquivs(
                        catFromBS,
                        catTo,
                        catToBS,
+                       catToFIFO,
+                       catToFIFOBS,
                        cd,
                        cut,
                        cutR,
@@ -135,7 +137,8 @@ genericCatFrom readfilefunc appendfunc empty fplist inp =
                              return (appendfunc accum c)
 
 {- | Takes input, writes it to the specified file, and does not pass it on.
-     The return value is the empty string.  See also 'catToBS', 'tee'.  -}
+     The return value is the empty string.  See also 'catToBS', 
+     'catToFIFO', 'tee'.  -}
 catTo :: FilePath -> String -> IO String
 catTo fp inp =
     do writeFile fp inp
@@ -147,6 +150,33 @@ catToBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
 catToBS fp inp =
     do BSL.writeFile fp inp
        return (BSL.empty)
+
+{- | Like 'catTo', but opens the destination in ReadWriteMode instead of
+ReadOnlyMode.  Due to an oddity of the Haskell IO system, this is required
+when writing to a named pipe (FIFO) even if you will never read from it.
+
+This is provided in addition to 'catTo' because you may want to cat to
+something that you do not have permission to read from.
+
+See also 'catTo', 'catToFIFOBS' -}
+catToFIFO :: FilePath -> String -> IO String
+catToFIFO fp inp =
+    do h <- openFile fp ReadWriteMode
+       hPutStr h inp
+       hClose h
+       return ""
+
+{- | Like 'catToFIFO', but for lazy ByteStrings -}
+catToFIFOBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
+catToFIFOBS fp inp =
+    do h <- openBinaryFile fp ReadWriteMode
+       BSL.hPut h inp
+       hClose h
+       return BSL.empty
+
+genericCatTo :: FilePath -> (Handle -> a -> IO ()) -> IO ()
+genericCatTo fp =
+    do fd <- openFd fp WriteOnly (Just 0o666) (OpenFileFlags False False False False False
 
 {- | Like 'catTo', but appends to the file. -}
 appendTo :: FilePath -> String -> IO String
