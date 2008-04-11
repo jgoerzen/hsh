@@ -76,9 +76,11 @@ import System.Posix.Files (getFileStatus, isSymbolicLink, readSymbolicLink)
 import System.Posix.User (getEffectiveUserName, getUserEntryForName, homeDirectory)
 import System.Posix.Directory (createDirectory)
 import System.Posix.Types (FileMode())
+import System.Posix.IO
 import System.Path (absNormPath, bracketCWD)
 import System.Exit
 import System.IO
+import System.Posix.Error
 import qualified System.Path.Glob as Glob (glob)
 import qualified Data.ByteString.Lazy as BSL
 
@@ -156,24 +158,31 @@ catToBS fp inp =
 ReadOnlyMode.  Due to an oddity of the Haskell IO system, this is required
 when writing to a named pipe (FIFO) even if you will never read from it.
 
+This call will BLOCK all threads on open until a reader connects.
+
 This is provided in addition to 'catTo' because you may want to cat to
 something that you do not have permission to read from.
 
 See also 'catTo', 'catToFIFOBS' -}
 catToFIFO :: FilePath -> String -> IO String
-catToFIFO fp inp =
-    do h <- openFile fp ReadWriteMode
-       hPutStr h inp
+catToFIFO = genericCatToFIFO hPutStr ""
+
+genericCatToFIFO :: (Handle -> a -> IO ()) -- hPutStr function
+                 -> a                      -- empty value to return
+                 -> FilePath               -- Path
+                 -> a                      -- Value to write
+                 -> IO a
+genericCatToFIFO hputstrfunc emptyval fp inp =
+    do fd <- throwErrnoPathIf (< 0) "genericCatToFIFO" fp $ 
+             openFd fp WriteOnly Nothing defaultFileFlags
+       h <- fdToHandle fd
+       hputstrfunc h inp
        hClose h
-       return ""
+       return emptyval
 
 {- | Like 'catToFIFO', but for lazy ByteStrings -}
 catToFIFOBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
-catToFIFOBS fp inp =
-    do h <- openBinaryFile fp ReadWriteMode
-       BSL.hPut h inp
-       hClose h
-       return BSL.empty
+catToFIFOBS = genericCatToFIFO BSL.hPut BSL.empty
 
 {- | Like 'catTo', but appends to the file. -}
 appendTo :: FilePath -> String -> IO String
