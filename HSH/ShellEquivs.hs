@@ -174,10 +174,6 @@ catToFIFOBS fp inp =
        hClose h
        return BSL.empty
 
-genericCatTo :: FilePath -> (Handle -> a -> IO ()) -> IO ()
-genericCatTo fp =
-    do fd <- openFd fp WriteOnly (Just 0o666) (OpenFileFlags False False False False False
-
 {- | Like 'catTo', but appends to the file. -}
 appendTo :: FilePath -> String -> IO String
 appendTo fp inp =
