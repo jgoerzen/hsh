@@ -12,13 +12,16 @@ import System.IO
 import Text.Printf
 
 -- main = do runTestTT tests
-main = do (c, _) <- performTest reportStart reportError reportFailure () tests
+main = do hSetBuffering stdout LineBuffering
+          hSetBuffering stderr LineBuffering
+          (c, _) <- performTest reportStart reportError reportFailure () tests
           printf "\n DONE: %d\n" (tried c)
 
 reportStart :: ReportStart ()
 reportStart st () =
     do printf "[%-4d] START   %s\n" (tried . counts $ st)
                (showPath . path $ st)
+       hFlush stdout
        return ()
 
 reportError :: ReportProblem ()
@@ -31,5 +34,6 @@ problem :: String -> ReportProblem ()
 problem ptype ptext st () =
     do printf "[%-4d] %s %s\n       %s\n" (tried . counts $ st)
            (showPath . path $ st) ptext
+       hFlush stdout
        return ()
 
