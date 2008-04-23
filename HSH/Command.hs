@@ -404,8 +404,11 @@ nullChildFunc = return ()
    includes a description of the last command in the pipe to have
    an error (or the last command, if there was no error)
 
- * IO ByteString and IO (ByteString, ProcessStatus) are similar to their
-   String counterparts.
+ * IO ByteString and are similar to their String counterparts.
+
+ * IO (String, IO (String, ProcessStatus)) returns a String read lazily
+   and an IO action that, when evaluated, finishes up the process and
+   results in its exit status.
 
  * IO Int returns the exit code from a program directly.  If a signal
    caused the command to be reaped, returns 128 + SIGNUM.
@@ -462,12 +465,20 @@ instance RunResult (IO BS.ByteString) where
               (\c -> evaluate (BS.length c))
               cmd
 
-genericStringlikeResult :: ShellCommand b => 
-                           (Handle -> IO a)
-                        -> (a -> IO c)
-                        -> b 
-                        -> IO a
-genericStringlikeResult hgetcontentsfunc evalfunc cmd =
+instance RunResult (IO (String, IO (String, ProcessStatus))) where
+    run cmd = intermediateStringlikeResult hGetContents cmd
+
+instance RunResult (IO (BSL.ByteString, IO (String, ProcessStatus))) where
+    run cmd = intermediateStringlikeResult BSL.hGetContents cmd
+
+instance RunResult (IO (BS.ByteString, IO (String, ProcessStatus))) where
+    run cmd = intermediateStringlikeResult BS.hGetContents cmd
+
+intermediateStringlikeResult :: ShellCommand b =>
+                                (Handle -> IO a)
+                             -> b
+                             -> IO (a, IO (String, ProcessStatus))
+intermediateStringlikeResult hgetcontentsfunc cmd =
         do (pread, pwrite) <- createPipe
            -- d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
            -- d "runS 1"
@@ -479,12 +490,20 @@ genericStringlikeResult hgetcontentsfunc evalfunc cmd =
            -- d "runS 4"
            c <- hgetcontentsfunc hread
            -- d "runS 5"
+           return (c, processResults r)
+
+genericStringlikeResult :: ShellCommand b => 
+                           (Handle -> IO a)
+                        -> (a -> IO c)
+                        -> b 
+                        -> IO a
+genericStringlikeResult hgetcontentsfunc evalfunc cmd =
+        do (c, r) <- intermediateStringlikeResult hgetcontentsfunc cmd
            evalfunc c
            --evaluate (length c)
            -- d "runS 6"
-           hClose hread
            -- d "runS 7"
-           processResults r >>= checkResults
+           r >>= checkResults
            -- d "runS 8"
            return c
 
