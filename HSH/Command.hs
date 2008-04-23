@@ -25,6 +25,7 @@ module HSH.Command (ShellCommand(..),
                     runIO,
                     runSL,
                     InvokeResult,
+                    checkResults,
                     tryEC,
                     catchEC,
                    ) where
