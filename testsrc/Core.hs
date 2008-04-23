@@ -22,7 +22,9 @@ basics =
     ]
 
 pipes =
-    [cmdcase "sh2sh" "100\n" $ "cat testsrc/testdata/quux" -|- "wc -l",
+    [
+     cmdcase "s->s|sh" (map toUpper lsbase) $ echo lsbase -|- "tr a-z A-Z",
+     cmdcase "sh2sh" "100\n" $ "cat testsrc/testdata/quux" -|- "wc -l",
      cmdcase "sh2sh2sh" "14\n" $
              "cat testsrc/testdata/quux" -|- "grep oo" -|- "wc -l",
      cmdcase "sh2sh2sh2sh" "0000000 032061 000012\n0000003\n" $
@@ -33,7 +35,6 @@ pipes =
              lscmd -|- (map toUpper) -|- "grep BA",
      cmdcase "sh|s->s|s->s" "BAR\nBAZ\n" $
              lscmd -|- (map toUpper) -|- grep "BA",
-     cmdcase "s->s|sh" (map toUpper lsbase) $ echo lsbase -|- "tr a-z A-Z",
      cmdcase "s->s|sh|sh" "BAR\nBAZ\n" $
              echo lsbase -|- "tr a-z A-Z" -|- "grep BA",
      cmdcase "s->s|sh|s->s" "BAR\nBAZ\n" $
@@ -80,8 +81,9 @@ errortests =
                                         ((run cmd)::IO ())
        
 tests = TestList
-        [TestLabel "basics" $ TestList basics,
+        [
          TestLabel "pipes" $ TestList pipes,
+         TestLabel "basics" $ TestList basics,
          TestLabel "errors" $ TestList errortests,
          TestLabel "sleep" $ TestList sleeptests]
 

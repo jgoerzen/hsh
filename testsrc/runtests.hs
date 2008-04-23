@@ -17,8 +17,7 @@ main = do (c, _) <- performTest reportStart reportError reportFailure () tests
 
 reportStart :: ReportStart ()
 reportStart st () =
-    do putStrLn $ "reportStart : " ++ (showPath . path $ st)
-       printf "[%-4d] START   %s\n" (tried . counts $ st)
+    do printf "[%-4d] START   %s\n" (tried . counts $ st)
                (showPath . path $ st)
        return ()
 
@@ -30,8 +29,7 @@ reportFailure = problem "FAILURE"
 
 problem :: String -> ReportProblem ()
 problem ptype ptext st () =
-    do putStrLn "problem"
-       printf "[%-4d] %s %s\n       %s\n" (tried . counts $ st)
+    do printf "[%-4d] %s %s\n       %s\n" (tried . counts $ st)
            (showPath . path $ st) ptext
        return ()
 
