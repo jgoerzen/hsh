@@ -87,9 +87,6 @@ instances of 'ShellCommand' for a full list.  Here are a few:
    types that are supported natively include @(String -> String)@,
    @(String -> IO String)@, plus many more involving ByteStrings and functions
    that take no input.  See 'HSH.Command.ShellCommand' for more.
-@([String] -> [String])@, 
-   @([String] -> IO [String])@.  Those that accept a @[String]@ type will
-   have each string in the list representing a single line.
 
 Pipes can be constructed by using the -|- operator, as illustrated above.
 It is quite possible to pipe data between Haskell functions and
