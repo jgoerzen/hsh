@@ -264,7 +264,7 @@ genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
                  i $ "genericStringlikeO calling putMVar"
                  putMVar mv True
                  i $ "genericStringlikeO child thread exiting"
-          i x = warningM "" x >> hFlush stderr
+          i x = debugM "" x
           waitExit mv = do i $ "genericStringlikeO waitExit w"
                            takeMVar mv
                            i $ "genericStringlikeO waitExit returning"
