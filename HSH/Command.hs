@@ -86,7 +86,9 @@ Some pre-defined instance functions include:
 
  * @(() -> String)@, @(() -> IO String)@, for commands that explicitly
    read no input.  Useful with closures.  Useful when you want to avoid
-   reading stdin because something else already is.
+   reading stdin because something else already is.  These have the unit as
+   part of the function because otherwise we would have conflicts with things
+   such as bare Strings, which represent a command name.
 
 -}
 class (Show a) => ShellCommand a where
@@ -100,25 +102,49 @@ class (Show a) => ShellCommand a where
 
 instance Show (String -> String) where
     show _ = "(String -> String)"
+instance Show (() -> String) where
+    show _ = "(() -> String)"
 instance Show (String -> IO String) where
     show _ = "(String -> IO String)"
+instance Show (() -> IO String) where
+    show _ = "(() -> IO String)"
 instance Show (BSL.ByteString -> BSL.ByteString) where
     show _ = "(Data.ByteString.Lazy.ByteString -> Data.ByteString.Lazy.ByteString)"
+instance Show (() -> BSL.ByteString) where
+    show _ = "(() -> Data.ByteString.Lazy.ByteString)"
 instance Show (BSL.ByteString -> IO BSL.ByteString) where
     show _ = "(Data.ByteString.Lazy.ByteString -> IO Data.ByteString.Lazy.ByteString)"
+instance Show (() -> IO BSL.ByteString) where
+    show _ =  "(() -> IO BSL.ByteString)"
 instance Show (BS.ByteString -> BS.ByteString) where
     show _ = "(Data.ByteString.ByteString -> Data.ByteString.ByteString)"
+instance Show (() -> BS.ByteString) where
+    show _ = "(() -> Data.ByteString.ByteString)"
 instance Show (BS.ByteString -> IO BS.ByteString) where
     show _ = "(Data.ByteString.ByteString -> IO Data.ByteString.ByteString)"
+instance Show (() -> IO BS.ByteString) where
+    show _ = "(() -> IO Data.ByteString.ByteString)"
 
 instance ShellCommand (String -> IO String) where
     fdInvoke = genericStringlikeIO hGetContents hPutStr
 
+instance ShellCommand (() -> IO String) where
+    fdInvoke func = genericStringlikeIO (\_ -> return "") hPutStr realfunc
+        where realfunc _ = func ()
+
 instance ShellCommand (BSL.ByteString -> IO BSL.ByteString) where
     fdInvoke = genericStringlikeIO BSL.hGetContents BSL.hPut
 
+instance ShellCommand (() -> IO BSL.ByteString) where
+    fdInvoke func = genericStringlikeIO (\_ -> return BSL.empty) BSL.hPut realfunc
+        where realfunc _ = func ()
+
 instance ShellCommand (BS.ByteString -> IO BS.ByteString) where
     fdInvoke = genericStringlikeIO BS.hGetContents BS.hPut
+
+instance ShellCommand (() -> IO BS.ByteString) where
+    fdInvoke func = genericStringlikeIO (\_ -> return BS.empty) BS.hPut realfunc
+        where realfunc _ = func ()
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String.  Implement in terms of (String -> IO String) for
@@ -129,16 +155,34 @@ instance ShellCommand (String -> String) where
             where iofunc :: String -> IO String
                   iofunc = return . func
 
+instance ShellCommand (() -> String) where
+    fdInvoke func =
+        fdInvoke iofunc
+            where iofunc :: () -> IO String
+                  iofunc = return . func
+
 instance ShellCommand (BSL.ByteString -> BSL.ByteString) where
     fdInvoke func =
         fdInvoke iofunc
             where iofunc :: BSL.ByteString -> IO BSL.ByteString
                   iofunc = return . func
 
+instance ShellCommand (() -> BSL.ByteString) where
+    fdInvoke func =
+        fdInvoke iofunc
+            where iofunc :: () -> IO BSL.ByteString
+                  iofunc = return . func
+
 instance ShellCommand (BS.ByteString -> BS.ByteString) where
     fdInvoke func =
         fdInvoke iofunc
             where iofunc :: BS.ByteString -> IO BS.ByteString
+                  iofunc = return . func
+
+instance ShellCommand (() -> BS.ByteString) where
+    fdInvoke func =
+        fdInvoke iofunc
+            where iofunc :: () -> IO BS.ByteString
                   iofunc = return . func
 
 genericStringlikeIO :: (Show (a -> IO a)) => 
@@ -184,8 +228,12 @@ genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefd
 
 instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
+instance Show (() -> [String]) where
+    show _ = "(() -> [String])"
 instance Show ([String] -> IO [String]) where
     show _ = "([String] -> IO [String])"
+instance Show (() -> IO [String]) where
+    show _ = "(() -> IO [String])"
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 [String] to [String].
@@ -198,11 +246,21 @@ lines of output. -}
 instance ShellCommand ([String] -> [String]) where
     fdInvoke func = fdInvoke (unlines . func . lines)
 
+instance ShellCommand (() -> [String]) where
+    fdInvoke func = fdInvoke (unlines . func)
+
 {- | The same for an IO function -}
 instance ShellCommand ([String] -> IO [String]) where
     fdInvoke func = fdInvoke iofunc
         where iofunc input = do r <- func (lines input)
                                 return (unlines r)
+
+{- | The same for an IO function -}
+instance ShellCommand (() -> IO [String]) where
+    fdInvoke func = fdInvoke iofunc
+        where iofunc :: (() -> IO String)
+              iofunc () = do r <- func ()
+                             return (unlines r)
 
 
 {- | An instance of 'ShellCommand' for an external command.  The
