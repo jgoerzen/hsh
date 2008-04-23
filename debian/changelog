@@ -1,3 +1,9 @@
+haskell-hsh (1.2.6.1) unstable; urgency=low
+
+  * Rebuild with newer MissingH.
+
+ -- John Goerzen <jgoerzen@complete.org>  Wed, 23 Apr 2008 02:57:01 -0500
+
 haskell-hsh (1.2.6.0) unstable; urgency=low
 
   * Now support ByteString for many operations.
