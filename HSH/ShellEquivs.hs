@@ -113,7 +113,7 @@ bracketCD = bracketCWD
 {- | Load the specified files and display them, one at a time.
 
 The special file @-@ means to display the input.  If it is not given,
-no input is read.
+no input is processed (though a small amount may be read into a buffer).
 
 Unlike the shell cat, @-@ may be given twice.  However, if it is, you
 will be forcing Haskell to buffer the input.
@@ -225,12 +225,12 @@ cutR nums delim z = drop 1 $ concat [delim:x | (x, y) <- zip string [0..], elem 
 The input to this function is never read.
 
 See also 'echoBS'. -}
-echo :: String -> String -> String
-echo inp _ = inp
+echo :: String -> () -> String
+echo inp () = inp
 
 {- | ByteString.Lazy version of 'echo'. -}
-echoBS :: BSL.ByteString -> BSL.ByteString -> BSL.ByteString
-echoBS inp _ = inp
+echoBS :: BSL.ByteString -> () -> BSL.ByteString
+echoBS inp () = inp
 
 {- | Search for the regexp in the lines.  Return those that match. -}
 egrep :: String -> [String] -> [String]
