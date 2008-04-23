@@ -240,6 +240,11 @@ genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
        i $ "\ngenericStringlikeO: fds " ++ show fstdout ++ " -> " ++ show myfstdout
        hw <- fdToHandle myfstdout
        forkIO (childthread mv hw)
+
+       -- VERY IMPORTANT: if we don't yield here, then we may return and
+       -- fds get closed before the child thread ever has a chance to run.
+       -- Results in deadlock.
+       yield
        i $ "\ngenericSLO: after forkIO, before return"
        return [(show func,
                 waitExit mv)]
