@@ -233,31 +233,31 @@ genericStringlikeO :: (Show (() -> IO a)) =>
                    -> (IO ())
                    -> IO [InvokeResult]
 genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
-    do mv <- (newEmptyMVar::IO (MVar ()))
+    do mv <- (newEmptyMVar::IO (MVar Bool))
        -- PipeCommand's implementation will close endpoints in the parent.
        -- We need to dup them so that they'll hang around.
        myfstdout <- dup fstdout
-       i $ "\ngenericStringlikeO: fds " ++ show fstdout ++ " -> " ++ show myfstdout
+       -- i $ "\ngenericStringlikeO: fds " ++ show fstdout ++ " -> " ++ show myfstdout
        hw <- fdToHandle myfstdout
        forkIO (childthread mv hw)
        return [(show func,
                 waitExit mv)]
     where childthread mv hw =
               do hSetBuffering stderr LineBuffering
-                 i $ "\ngenericStringlikeO thread start: " ++ show func
+                 --i $ "\ngenericStringlikeO thread start: " ++ show func
                  --hw <- fdToHandle myfstdout
                  hSetBuffering hw LineBuffering
-                 i $ "genericStringlikeO calling childfunc"
+                 --i $ "genericStringlikeO calling childfunc"
                  childfunc
-                 i $ "genericStringlikeO calling func"
+                 --i $ "genericStringlikeO calling func"
                  result <- func ()
-                 i $ "genericStringlikeO calling hputstrfunc"
+                 --i $ "genericStringlikeO calling hputstrfunc"
                  hputstrfunc hw result
-                 i $ "genericStringlikeO calling hClose"
+                 --i $ "genericStringlikeO calling hClose"
                  hClose hw
-                 i $ "genericStringlikeO calling putMVar"
-                 putMVar mv ()
-                 i $ "genericStringlikeO child thread exiting"
+                 --i $ "genericStringlikeO calling putMVar"
+                 putMVar mv True
+                 --i $ "genericStringlikeO child thread exiting"
           i = warningM ""
           waitExit mv = do i $ "genericStringlikeO waitExit w"
                            takeMVar mv
