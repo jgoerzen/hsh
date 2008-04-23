@@ -85,7 +85,9 @@ instances of 'ShellCommand' for a full list.  Here are a few:
  * A Haskell function.  This function will accept input representing
    its standard input and generate output to go to stdout.  Function
    types that are supported natively include @(String -> String)@,
-   @(String -> IO String)@, @([String] -> [String])@, 
+   @(String -> IO String)@, plus many more involving ByteStrings and functions
+   that take no input.  See 'HSH.Command.ShellCommand' for more.
+@([String] -> [String])@, 
    @([String] -> IO [String])@.  Those that accept a @[String]@ type will
    have each string in the list representing a single line.
 

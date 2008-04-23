@@ -62,6 +62,32 @@ or pipe in both directions.  All commands that can be run as shell
 commands must define these methods.
 
 Minimum implementation is 'fdInvoke'.
+
+Some pre-defined instances include:
+
+ * A simple bare string, which is passed to the shell for execution. The shell
+   will then typically expand wildcards, parse parameters, etc.
+
+ * A @(String, [String])@ tuple.  The first item in the tuple gives
+   the name of a program to run, and the second gives its arguments.
+   The shell is never involved.  This is ideal for passing filenames,
+   since there is no security risk involving special shell characters.
+
+ * Various functions.  These functions will accept input representing
+   its standard input and output will go to standard output.  
+
+Some pre-defined instance functions include:
+
+ * @(String -> String)@, @(String -> IO String)@, plus the same definitions
+   for ByteStrings.
+
+ * @([String] -> [String])@, @([String] -> IO [String])@, where each @String@
+   in the list represents a single line
+
+ * @(() -> String)@, @(() -> IO String)@, for commands that explicitly
+   read no input.  Useful with closures.  Useful when you want to avoid
+   reading stdin because something else already is.
+
 -}
 class (Show a) => ShellCommand a where
     {- | Invoke a command. -}
