@@ -75,6 +75,9 @@ Some pre-defined instances include:
    The shell is never involved.  This is ideal for passing filenames,
    since there is no security risk involving special shell characters.
 
+ * A @Handle -> Handle -> IO ()@ function, which reads from the first
+   handle and write to the second.
+
  * Various functions.  These functions will accept input representing
    its standard input and output will go to standard output.  
 
@@ -102,6 +105,8 @@ class (Show a) => ShellCommand a where
              -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
+instance Show (Handle -> Handle -> IO ()) where
+    show _ = "(Handle -> Handle -> IO ())"
 instance Show (String -> String) where
     show _ = "(String -> String)"
 instance Show (() -> String) where
@@ -184,6 +189,24 @@ instance ShellCommand (() -> BS.ByteString) where
             where iofunc :: () -> IO BS.ByteString
                   iofunc = return . func
 
+instance ShellCommand (Handle -> Handle -> IO ()) where
+    fdInvoke func fstdin fstdout childclosefds childfunc =
+        do p <- try (forkProcess childstuff)
+           pid <- case p of
+                    Right x -> return x
+                    Left x -> fail $ "Error in fork for func: " ++ show x
+           return $ seq pid pid
+           return [(show func,
+                    getProcessStatus True False pid >>=
+                                     (return . forceMaybe))]
+        where childstuff = do closefds childclosefds [fstdin, fstdout]
+                              hr <- fdToHandle fstdin
+                              hw <- fdToHandle fstdout
+                              childfunc
+                              func hr hw
+                              hClose hr
+                              hClose hw
+
 genericStringlikeIO :: (Show (a -> IO a)) => 
                        (Handle -> IO a) 
                     -> (Handle -> a -> IO ()) 
@@ -194,36 +217,16 @@ genericStringlikeIO :: (Show (a -> IO a)) =>
                     -> (IO ()) 
                     -> IO [InvokeResult]
 genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefds childfunc =
-        do -- d $ "SIOSF: Before fork"
-           p <- try (forkProcess childstuff)
-           pid <- case p of
-                    Right x -> return x
-                    Left x -> fail $ "Error in fork for func: " ++ show x
-           -- d $ "SIOSFP: New func pid " ++ show pid
-           return $ seq pid pid
-           return [(show func,
-                   getProcessStatus True False pid >>=
-                                    (return . forceMaybe))]
-        where childstuff = do closefds childclosefds [fstdin, fstdout]
-                              d $ "SIOSFC Input is on " ++ show fstdin
-                              hr <- fdToHandle fstdin
-                              d $ "SIOSFC Output is on " ++ show fstdout
-                              hw <- fdToHandle fstdout
-                              hSetBuffering hw LineBuffering
-                              d $ "SIOSFC Running child func"
-                              childfunc
+    do r <- fdInvoke realfunc fstdin fstdout childclosefds childfunc
+       return $ map (\(_, y) -> (show func, y)) r
+    where realfunc :: Handle -> Handle -> IO ()
+          realfunc hr hw = do hSetBuffering hw LineBuffering
                               d $ "SIOSFC Running func in child"
                               contents <- getcontentsfunc hr
                               d $ "SIOSFC Contents read"
                               result <- func contents
                               d $ "SIOSFC Func applied"
                               hputstrfunc hw result
-                              d $ "SIOSFC Func done, closing handles."
-                              hClose hr
-                              hClose hw
-                              d $ "SIOSFC Child exiting."
-                              -- It hung here without the exitImmediately
-                              --exitImmediately ExitSuccess
 
 genericStringlikeO :: (Show (() -> IO a)) =>
                       (Handle -> a -> IO ())
