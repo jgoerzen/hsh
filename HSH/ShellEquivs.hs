@@ -58,6 +58,7 @@ module HSH.ShellEquivs(
                        tac,
                        tee,
                        teeBS,
+                       teeFIFOBS,
                        tr,
                        trd,
                        wcW,
@@ -83,6 +84,8 @@ import System.IO
 import System.Posix.Error
 import qualified System.Path.Glob as Glob (glob)
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString as BS
+import System.IO.Unsafe(unsafeInterleaveIO)
 
 {- | Return the absolute path of the arg.  Raises an error if the
 computation is impossible. -}
@@ -173,12 +176,16 @@ genericCatToFIFO :: (Handle -> a -> IO ()) -- hPutStr function
                  -> a                      -- Value to write
                  -> IO a
 genericCatToFIFO hputstrfunc emptyval fp inp =
-    do fd <- throwErrnoPathIf (< 0) "genericCatToFIFO" fp $ 
-             openFd fp WriteOnly Nothing defaultFileFlags
-       h <- fdToHandle fd
+    do h <- fifoOpen fp
        hputstrfunc h inp
        hClose h
        return emptyval
+
+fifoOpen :: FilePath -> IO Handle
+fifoOpen fp = 
+    do fd <- throwErrnoPathIf (< 0) "HSH fifoOpen" fp $ 
+             openFd fp WriteOnly Nothing defaultFileFlags
+       fdToHandle fd
 
 {- | Like 'catToFIFO', but for lazy ByteStrings -}
 catToFIFOBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
@@ -359,11 +366,31 @@ tee :: [FilePath] -> String -> IO String
 tee [] inp = return inp
 tee (x:xs) inp = writeFile x inp >> tee xs inp
 
-{- | Lazy ByteString version of 'tee'. -}
+{- | Lazy ByteString version of 'tee'.  This function does /NOT/ buffer
+input. -}
 teeBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
-teeBS [] inp = return inp
-teeBS (x:xs) inp = BSL.writeFile x inp >> teeBS xs inp
+teeBS fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
 
+{- | FIFO-safe version of 'teeBS'.
+
+This call will BLOCK all threads on open until a reader connects. -}
+teeFIFOBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+teeFIFOBS fplist inp = teeBSGeneric fifoOpen fplist inp
+
+teeBSGeneric :: (FilePath -> IO Handle) -> [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+teeBSGeneric openfunc fplist inp =
+    do handles <- mapM openfunc fplist
+       resultChunks <- hProcChunks handles (BSL.toChunks inp)
+       return (BSL.fromChunks resultChunks)
+    where hProcChunks :: [Handle] -> [BS.ByteString] -> IO [BS.ByteString]
+          hProcChunks handles chunks = unsafeInterleaveIO $
+              case chunks of
+                [] -> do mapM_ hClose handles
+                         return [BS.empty]
+                (x:xs) -> do mapM_ (\h -> BS.hPutStr h x) handles
+                             remainder <- hProcChunks handles xs
+                             return (x : remainder)
+    
 {- | Translate a character x to y, like:
 
 >tr 'e' 'f'
