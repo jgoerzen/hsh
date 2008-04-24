@@ -245,7 +245,8 @@ genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
        -- VERY IMPORTANT: if we don't yield here, then we may return and
        -- fds get closed before the child thread ever has a chance to run.
        -- Results in deadlock.
-       yield
+       -- The child will signal by loading up the MVar when we can proceed.
+       takeMVar mv
        i $ "\ngenericSLO: after forkIO, before return"
        return [(show func,
                 waitExit mv)]
@@ -254,6 +255,8 @@ genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
                  i $ "\ngenericStringlikeO thread start: " ++ show func
                  --hw <- fdToHandle myfstdout
                  hSetBuffering hw LineBuffering
+                 i $ "genericStringlikeO signalling parent to proceed"
+                 putMVar mv False
                  i $ "genericStringlikeO calling childfunc"
                  childfunc
                  i $ "genericStringlikeO calling func"
@@ -488,6 +491,7 @@ intermediateStringlikeResult hgetcontentsfunc cmd =
            closeFd pwrite
            -- d "runS 3"
            hread <- fdToHandle pread
+           hSetBuffering hread NoBuffering
            -- d "runS 4"
            c <- hgetcontentsfunc hread
            -- d "runS 5"
