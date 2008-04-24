@@ -47,6 +47,7 @@ import System.Posix.Env
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)
+import Control.Concurrent
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 
@@ -130,19 +131,19 @@ instance ShellCommand (String -> IO String) where
     fdInvoke = genericStringlikeIO hGetContents hPutStr
 
 instance ShellCommand (() -> IO String) where
-    fdInvoke = genericStringlikeO "" hPutStr
+    fdInvoke = genericStringlikeO hPutStr
 
 instance ShellCommand (BSL.ByteString -> IO BSL.ByteString) where
     fdInvoke = genericStringlikeIO BSL.hGetContents BSL.hPut
 
 instance ShellCommand (() -> IO BSL.ByteString) where
-    fdInvoke = genericStringlikeO BSL.empty BSL.hPut
+    fdInvoke = genericStringlikeO BSL.hPut
 
 instance ShellCommand (BS.ByteString -> IO BS.ByteString) where
     fdInvoke = genericStringlikeIO BS.hGetContents BS.hPut
 
 instance ShellCommand (() -> IO BS.ByteString) where
-    fdInvoke = genericStringlikeO BS.empty BS.hPut
+    fdInvoke = genericStringlikeO BS.hPut
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String.  Implement in terms of (String -> IO String) for
@@ -224,18 +225,55 @@ genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefd
                               -- It hung here without the exitImmediately
                               --exitImmediately ExitSuccess
 
-genericStringlikeO :: (Show (() -> IO a), Show (a -> IO a)) =>
-                      a
-                   -> (Handle -> a -> IO ())
+genericStringlikeO :: (Show (() -> IO a)) =>
+                      (Handle -> a -> IO ())
                    -> (() -> IO a)
                    -> Fd
                    -> Fd
                    -> [Fd]
                    -> (IO ())
                    -> IO [InvokeResult]
-genericStringlikeO emptyvalue hputstrfunc func = 
-    genericStringlikeIO (\_ -> return emptyvalue) hputstrfunc
-                        (\_ -> func ())
+genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
+    do mv <- (newEmptyMVar::IO (MVar Bool))
+       -- PipeCommand's implementation will close endpoints in the parent.
+       -- We need to dup them so that they'll hang around.
+       myfstdout <- dup fstdout
+       i $ "\ngenericStringlikeO: fds " ++ show fstdout ++ " -> " ++ show myfstdout
+       hw <- fdToHandle myfstdout
+       forkIO (childthread mv hw)
+
+       -- VERY IMPORTANT: if we don't yield here, then we may return and
+       -- fds get closed before the child thread ever has a chance to run.
+       -- Results in deadlock.
+       -- The child will signal by loading up the MVar when we can proceed.
+       yield
+       takeMVar mv
+       yield
+       i $ "\ngenericSLO: after forkIO, before return"
+       return [(show func,
+                waitExit mv)]
+    where childthread mv hw =
+              do i $ "\ngenericStringlikeO thread start: " ++ show func
+                 --hw <- fdToHandle myfstdout
+                 hSetBuffering hw LineBuffering
+                 i $ "genericStringlikeO signalling parent to proceed"
+                 putMVar mv False
+                 i $ "genericStringlikeO calling childfunc"
+                 childfunc
+                 i $ "genericStringlikeO calling func"
+                 result <- func ()
+                 i $ "genericStringlikeO calling hputstrfunc"
+                 hputstrfunc hw result
+                 i $ "genericStringlikeO calling hClose"
+                 hClose hw
+                 i $ "genericStringlikeO calling putMVar"
+                 putMVar mv True
+                 i $ "genericStringlikeO child thread exiting"
+          i x = debugM "" x
+          waitExit mv = do i $ "genericStringlikeO waitExit w"
+                           takeMVar mv
+                           i $ "genericStringlikeO waitExit returning"
+                           return (Exited ExitSuccess)
 
 instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
