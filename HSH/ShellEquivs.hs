@@ -27,6 +27,8 @@ module HSH.ShellEquivs(
                        bracketCD,
                        catFrom,
                        catFromBS,
+                       catBytes,
+                       catBytesFrom,
                        catTo,
                        catToBS,
                        catToFIFO,
@@ -37,7 +39,6 @@ module HSH.ShellEquivs(
                        dirname,
                        echo,
                        echoBS,
-                       echoBytes,
                        exit,
                        glob,
                        grep,
@@ -124,9 +125,50 @@ will be forcing Haskell to buffer the input.
 
 Note: buffering behavior here is untested. 
 
-See also 'catFromBS'. -}
+See also 'catFromBS', 'catBytes' . -}
 catFrom :: [FilePath] -> String -> IO String
 catFrom = genericCatFrom readFile (++) ""
+
+{- | Copy data in chunks from stdin to stdout, optionally with a fixed
+maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
+to set the buffering of the input handle to blockbuffering in chunksize
+increments as well.  See also 'catFrom', 'catBytesFrom' -}
+catBytes :: Int                -- ^ Preferred chunk size; data will be read in chunks of this size
+          -> (Maybe Integer)    -- ^ Maximum amount of data to transfer
+          -> Handle             -- ^ Handle for input
+          -> Handle             -- ^ Handle for output
+          -> IO ()
+catBytes chunksize count hr = catBytesFrom chunksize hr count hr
+
+{- | Generic version of 'catBytes'; reads data from specified Handle, and
+ignores stdin. -}
+
+catBytesFrom :: Int             -- ^ Preferred chunk size; data will be read in chunks of this size
+             -> Handle          -- ^ Handle to read from
+             -> (Maybe Integer) -- ^ Maximum amount of data to transfer
+             -> Handle          -- ^ Handle for input (ignored)
+             -> Handle          -- ^ Handle for output
+             -> IO ()
+catBytesFrom _ _ (Just 0) _ _ = return ()
+catBytesFrom chunksize hr count hignore hw =
+    do hSetBuffering hr (BlockBuffering (Just chunksize))
+       case count of 
+         Just x -> if x < 1
+                      then do fail $ "catBytesFrom: count < 0 not supported"
+                      else return ()
+         _ -> return ()
+       r <- BS.hGet hr readamount
+       if BS.null r
+          then return ()        -- No more data to read
+          else do BS.hPutStr hw r
+                  catBytesFrom chunksize hr (newCount (BS.length r)) hignore hw
+    where readamount = 
+              case count of
+                Just x -> fromIntegral $ min x (fromIntegral chunksize)
+                Nothing -> (fromIntegral chunksize)
+          newCount newlen = case count of
+                              Nothing -> Nothing
+                              Just x -> Just (x - (fromIntegral newlen))
 
 {- | Lazy ByteString version of 'catFrom'.  This may have performance
 benefits. -}
@@ -240,35 +282,6 @@ echo inp () = inp
 echoBS :: BSL.ByteString -> () -> BSL.ByteString
 echoBS inp () = inp
 
-{- | Copy data in chunks from stdin to stdout, optionally with a fixed
-maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
-to set the buffering of the input handle to blockbuffering in chunksize
-increments as well. -}
-echoBytes :: Int                -- ^ Preferred chunk size; data will be read in chunks of this size
-          -> (Maybe Integer)    -- ^ Maximum amount of data to transfer
-          -> Handle             -- ^ Handle for input
-          -> Handle             -- ^ Handle for output
-          -> IO ()
-echoBytes _ (Just 0) _ _ = return ()
-echoBytes chunksize count hr hw =
-    do hSetBuffering hr (BlockBuffering (Just chunksize))
-       case count of 
-         Just x -> if x < 1
-                      then do fail $ "echoBytes: count < 0 not supported"
-                      else return ()
-         _ -> return ()
-       r <- BS.hGet hr chunksize
-       if BS.null r
-          then return ()        -- No more data to read
-          else do BS.hPutStr hw r
-                  echoBytes chunksize (newCount (BS.length r)) hr hw
-    where readamount = 
-              case count of
-                Just x -> min x (fromIntegral chunksize)
-                Nothing -> (fromIntegral chunksize)
-          newCount newlen = case count of
-                              Nothing -> Nothing
-                              Just x -> Just (x - (fromIntegral newlen))
 
 {- | Search for the regexp in the lines.  Return those that match. -}
 egrep :: String -> [String] -> [String]
