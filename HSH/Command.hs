@@ -410,13 +410,17 @@ nullChildFunc = return ()
 
  * IO (String, ProcessStatus) is like IO ProcessStatus, but also
    includes a description of the last command in the pipe to have
-   an error (or the last command, if there was no error)
+   an error (or the last command, if there was no error).
 
  * IO ByteString and are similar to their String counterparts.
 
  * IO (String, IO (String, ProcessStatus)) returns a String read lazily
    and an IO action that, when evaluated, finishes up the process and
-   results in its exit status.
+   results in its exit status.  This command returns immediately.
+
+ * IO (IO (String, ProcessStatus)) sends stdout to stdout but returns
+   immediately.  It forks off the child but does not wait for it to finish.
+   You can use 'checkResults' to wait for the finish.
 
  * IO Int returns the exit code from a program directly.  If a signal
    caused the command to be reaped, returns 128 + SIGNUM.
@@ -481,6 +485,10 @@ instance RunResult (IO (BSL.ByteString, IO (String, ProcessStatus))) where
 
 instance RunResult (IO (BS.ByteString, IO (String, ProcessStatus))) where
     run cmd = intermediateStringlikeResult BS.hGetContents cmd
+
+instance RunResult (IO (IO (String, ProcessStatus))) where
+    run cmd = do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
+                 return (processResults r)
 
 intermediateStringlikeResult :: ShellCommand b =>
                                 (Handle -> IO a)
