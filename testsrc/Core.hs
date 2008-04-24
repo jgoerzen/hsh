@@ -11,6 +11,7 @@ import HSH.ShellEquivs
 import TestUtils
 import Data.Char
 import Control.Exception
+import qualified Data.ByteString.Lazy as BSL
 
 basics =
     [cmdcase "echo" "hi\n" $ "echo hi",
@@ -36,18 +37,32 @@ pipes =
      cmdcase "s->s|sh" (map toUpper lsbase) $ echo lsbase -|- "tr a-z A-Z",
      cmdcase "s->s|sh|sh" "BAR\nBAZ\n" $
              echo lsbase -|- "tr a-z A-Z" -|- "grep BA",
+     cmdcase "s->s|sh|sh BS" (str2bs "BAR\nBAZ\n") $
+             echo lsbase -|- "tr a-z A-Z" -|- "grep BA",
+     cmdcase "BS s->s|sh|sh" "BAR\nBAZ\n" $
+             echoBS lsbaseBSL -|- "tr a-z A-Z" -|- "grep BA",
+     cmdcase "BS s->s|sh|sh BS" (str2bs "BAR\nBAZ\n") $
+             echoBS lsbaseBSL -|- "tr a-z A-Z" -|- "grep BA",
      cmdcase "s->s|sh|s->s" "BAR\nBAZ\n" $
              echo lsbase -|- "tr a-z A-Z" -|- grep "BA",
+     cmdcase "BS s->s|sh|s->s" "BAR\nBAZ\n" $
+             echoBS lsbaseBSL -|- "tr a-z A-Z" -|- grep "BA",
      cmdcase "s->s|s->s|sh" "BAR\nBAZ\n" $
              echo lsbase -|- (map toUpper) -|- "grep BA",
+     cmdcase "BS s->s|s->s|sh" "BAR\nBAZ\n" $
+             echoBS lsbaseBSL -|- (map toUpper) -|- "grep BA",
      cmdcase "s->s|s->s|s->s" "BAR\nBAZ\n" $
              echo lsbase -|- (map toUpper) -|- grep "BA",
+     cmdcase "BS s->s|s->s|s->s" "BAR\nBAZ\n" $
+             echoBS lsbaseBSL -|- (map toUpper) -|- grep "BA",
      cmdcase "true" "0\n" $ "true" -|- "wc -l",
      cmdcase "true|true" "" $ "true" -|- "true",
      cmdcase "shell" "testsrc/testdata/bar\ntestsrc/testdata/baz\ntestsrc/testdata/foo\ntestsrc/testdata/quux\n" "ls testsrc/testdata/*"
     ]
     where lsbase = "bar\nbaz\nfoo\nquux\n"
+          lsbaseBSL = str2bs lsbase
           lscmd = "ls testsrc/testdata"
+          str2bs = BSL.pack . map (fromIntegral . fromEnum)
 
 sleeptests = 
     [cmdcase "sleep 0.10" "" "sleep 0.10",
