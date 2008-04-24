@@ -246,13 +246,14 @@ genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
        -- fds get closed before the child thread ever has a chance to run.
        -- Results in deadlock.
        -- The child will signal by loading up the MVar when we can proceed.
+       yield
        takeMVar mv
+       yield
        i $ "\ngenericSLO: after forkIO, before return"
        return [(show func,
                 waitExit mv)]
     where childthread mv hw =
-              do hSetBuffering stderr LineBuffering
-                 i $ "\ngenericStringlikeO thread start: " ++ show func
+              do i $ "\ngenericStringlikeO thread start: " ++ show func
                  --hw <- fdToHandle myfstdout
                  hSetBuffering hw LineBuffering
                  i $ "genericStringlikeO signalling parent to proceed"
