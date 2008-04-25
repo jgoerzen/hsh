@@ -37,6 +37,7 @@ module HSH.ShellEquivs(
                        cut,
                        cutR,
                        dirname,
+                       discard,
                        echo,
                        echoBS,
                        exit,
@@ -257,6 +258,15 @@ cd = setCurrentDirectory
 -}
 cut :: Integer -> Char -> String -> String
 cut pos = cutR [pos]
+
+{- | Read all input and produce no output.  Discards input completely. -}
+discard :: Handle -> Handle -> IO ()
+discard inh outh =
+    do eof <- hIsEOF inh
+       if eof
+          then return ()
+          else do BS.hGet inh 4096
+                  discard inh outh
 
 {- | Split a list by a given character and select ranges of the resultant lists.
 
