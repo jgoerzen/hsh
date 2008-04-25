@@ -133,7 +133,8 @@ catFrom = genericCatFrom readFile (++) ""
 {- | Copy data in chunks from stdin to stdout, optionally with a fixed
 maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
 to set the buffering of the input handle to blockbuffering in chunksize
-increments as well.  See also 'catFrom', 'catBytesFrom' -}
+increments as well, but restores original buffering before returning.
+See also 'catFrom', 'catBytesFrom' -}
 catBytes :: Int                -- ^ Preferred chunk size; data will be read in chunks of this size
           -> (Maybe Integer)    -- ^ Maximum amount of data to transfer
           -> Handle             -- ^ Handle for input
@@ -150,9 +151,14 @@ catBytesFrom :: Int             -- ^ Preferred chunk size; data will be read in 
              -> Handle          -- ^ Handle for input (ignored)
              -> Handle          -- ^ Handle for output
              -> IO ()
-catBytesFrom _ _ (Just 0) _ _ = return ()
 catBytesFrom chunksize hr count hignore hw =
-    do hSetBuffering hr (BlockBuffering (Just chunksize))
+    do buf <- hGetBuffering hr
+       catBytesFrom' chunksize hr count hignore hw
+       hSetBuffering hr buf
+
+catBytesFrom' _ _ (Just 0) _ _ = return ()
+catBytesFrom' chunksize hr count hignore hw =
+    do hSetBuffering hr (BlockBuffering (Just readamount))
        case count of 
          Just x -> if x < 1
                       then do fail $ "catBytesFrom: count < 0 not supported"
@@ -162,7 +168,7 @@ catBytesFrom chunksize hr count hignore hw =
        if BS.null r
           then return ()        -- No more data to read
           else do BS.hPutStr hw r
-                  catBytesFrom chunksize hr (newCount (BS.length r)) hignore hw
+                  catBytesFrom' chunksize hr (newCount (BS.length r)) hignore hw
     where readamount = 
               case count of
                 Just x -> fromIntegral $ min x (fromIntegral chunksize)
