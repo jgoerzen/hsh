@@ -1,3 +1,10 @@
+haskell-hsh (1.2.6.2) unstable; urgency=low
+
+  * Rebuild with newer MissingH and hslogger.  Closes: #429708.
+  * Use dh_haskell_depends in debian/rules to permanently help fix this problem.
+
+ -- John Goerzen <jgoerzen@complete.org>  Fri, 05 Dec 2008 14:13:58 -0600
+
 haskell-hsh (1.2.6.1) unstable; urgency=low
 
   * Rebuild with newer MissingH.

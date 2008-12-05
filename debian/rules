@@ -67,6 +67,7 @@ install: build
 	# Add here commands to install the package into debian/tmp
 	#$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp
 	dh_haskell -a
+	dh_haskell_depends -a
 #	$(MAKE) clean
 # We can't test PostgreSQL because the server may not be available for
 # the build user.
