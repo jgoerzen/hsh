@@ -35,7 +35,7 @@ reportFailure = problem "FAILURE"
 
 problem :: String -> ReportProblem ()
 problem ptype ptext st () =
-    do printf "[%-4d/%-4d] %s %s\n       %s\n" (tried . counts $ st)
+    do printf "[%-4d/%-4d] %s\n       %s\n" (tried . counts $ st)
            (cases . counts $ st)
            (showPath . path $ st) ptext
        hFlush stdout
