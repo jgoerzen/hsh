@@ -26,8 +26,8 @@ pipes =
     [cmdcase "sh2sh" "100\n" $ "cat testsrc/testdata/quux" -|- "wc -l",
      cmdcase "sh2sh2sh" "14\n" $
              "cat testsrc/testdata/quux" -|- "grep oo" -|- "wc -l",
-     cmdcase "sh2sh2sh2sh" "0000000 032061 000012\n0000003\n" $
-             "cat testsrc/testdata/quux" -|- "grep oo" -|- "wc -l" -|- "od",
+     cmdcase "sh2sh2sh2sh" "0000000 061 064 012\n0000003\n" $
+             "cat testsrc/testdata/quux" -|- "grep oo" -|- "wc -l" -|- "od -b",
      cmdcase "ls baseline" lsbase lscmd,
      cmdcase "sh|s->s" (map toUpper lsbase) $ lscmd -|- (map toUpper),
      cmdcase "sh|s->s|sh" "BAR\nBAZ\n" $ 
