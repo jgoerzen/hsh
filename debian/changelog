@@ -1,3 +1,9 @@
+haskell-hsh (1.2.6.3) unstable; urgency=low
+
+  * Rebuild with newer libs.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 11 Dec 2008 09:15:40 -0600
+
 haskell-hsh (1.2.6.2) unstable; urgency=low
 
   * Rebuild with newer MissingH and hslogger.  Closes: #429708.
