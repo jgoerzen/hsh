@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances #-}
+{-# OPTIONS_GHC -XFlexibleInstances -XFlexibleContexts -XTypeSynonymInstances #-}
 
 {- Commands for HSH
 Copyright (C) 2004-2008 John Goerzen <jgoerzen@complete.org>
@@ -19,7 +19,9 @@ Copyright (c) 2006-2007 John Goerzen, jgoerzen\@complete.org
 
 module HSH.Command (ShellCommand(..),
                     PipeCommand(..),
+                    InputCommand(..),
                     (-|-),
+                    (>|-),
                     RunResult,
                     run,
                     runIO,
@@ -42,6 +44,7 @@ import System.IO.Error
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
+import Control.Concurrent(forkIO, yield, MVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception(evaluate)
 import System.Posix.Env
 import Text.Regex.Posix
@@ -54,6 +57,17 @@ import qualified Data.ByteString as BS
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
+
+{- | Operator fixities.  We need one of:
+
+  a >|- b -|- c -|> d  ===   a >- ( ( b -|- c )   -|> d )
+  a >|- b -|- c -|> d  === ( a >- (   b -|- c ) ) -|> d
+
+otherwise -|- does that forkProcess stuff which breaks the threads for
+(>|-) and (-|>). -}
+infixl 4 >|-
+infixr 6 -|-
+--infixr 5 -|>    {- TODO -}
 
 {- | Result type for shell commands.  The String is the text description of
 the command, not its output. -}
@@ -390,6 +404,90 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
 (-|-) = PipeCommand
+
+{- | An input source is something we can invoke and pipe from,
+but not pipe to.  We guarantee not to 'forkProcess', in case the
+input generator needs to interact with other threads in the main
+process.  We also guarantee to 'yield' sufficiently often, so that
+our process is not blocked until the pipeline completes.
+
+Minimum implementation is 'inputInvoke'.
+-}
+class Show a => InputSource a where
+    {- | Put some data into a stream. -}
+    inputInvoke :: a                   -- ^ data to write to stream
+                -> Fd                  -- ^ stream to write data to
+                -> IO InvokeResult     -- ^ wait for action
+
+{- | Instances of 'InputSource' for pure Haskell strings. -}
+instance InputSource String where
+    inputInvoke = genericStringlikeInput hPutStr
+
+instance InputSource BSL.ByteString where
+    inputInvoke = genericStringlikeInput BSL.hPut
+
+instance InputSource BS.ByteString where
+    inputInvoke = genericStringlikeInput BS.hPut
+
+{- | Instances of 'InputSource' for pure Haskell lists of strings. -}
+instance InputSource [String] where
+    inputInvoke = genericListStringlikeInput hPutStr
+
+instance InputSource [BSL.ByteString] where
+    inputInvoke = genericListStringlikeInput BSL.hPut
+
+instance InputSource [BS.ByteString] where
+    inputInvoke = genericListStringlikeInput BS.hPut
+
+{- Wait for child threads to finish before exiting the main program, by
+having each child thread write to an MVar when it completes, and have
+the main thread wait on all the MVars before exiting -}
+mvarForkIO :: a -> a -> IO i -> IO (MVar a)
+mvarForkIO success failure io = do
+  mvar <- newEmptyMVar
+  forkIO (io >> putMVar mvar success `catch` \_ -> putMVar mvar failure)
+  return mvar
+
+{- fork a writer (lightweight thread in the same process) -}
+genericStringlikeInput :: (Handle -> t -> IO i) -> t -> Fd -> IO InvokeResult
+genericStringlikeInput put str fd = do
+  mvar <- mvarForkIO (Exited (ExitSuccess)) (Exited (ExitFailure 42)) $
+    fdToHandle fd >>= \h -> put h str >> yield >> hClose h -- >> closeFd fd -- hmmm
+  return ("(InputSource String)", takeMVar mvar)
+
+{- fork a writer (lightweight thread in the same process) -}
+genericListStringlikeInput :: (Handle -> t -> IO i) -> [t] -> Fd -> IO InvokeResult
+genericListStringlikeInput put strs fd = do
+  mvar <- mvarForkIO (Exited (ExitSuccess)) (Exited (ExitFailure 43)) $
+    fdToHandle fd >>= \h -> mapM_ (\s -> put h s >> yield) strs >> hClose h -- >> closeFd fd -- hmmm
+  return ("(InputSource ListString)", takeMVar mvar)
+
+{- | Data type to hold (threaded, lazy) input to a pipeline. -}
+data (InputSource a, ShellCommand b) => InputCommand a b = InputCommand a b
+   deriving Show
+
+{- | An instance of 'ShellCommand' representing (threaded, lazy) input to a command. -}
+instance (InputSource a, ShellCommand b) => ShellCommand (InputCommand a b) where
+    fdInvoke pc@(InputCommand source cmd) fstdin fstdout childclosefds forkfunc =
+        do d $ "*** Handling pipe: " ++ show pc
+           (reader, writer) <- createPipe
+           let allfdstoclose = reader : writer : fstdin : fstdout : childclosefds
+           d $ "pipd fdInvoke: New pipe endpoints: " ++ show (reader, writer)
+           res1 <- inputInvoke source writer
+           res2 <- fdInvoke cmd reader fstdout allfdstoclose forkfunc
+           d $ "pipe fdInvoke: Parent closing " ++ show [reader]
+           mapM_ closeFd [reader] -- closing writer => invalid fd...
+           d $ "*** Done handling pipe " ++ show pc
+           return $ res1:res2
+
+{- | Pipe (threaded, lazy) input into a command. -}
+(>|-) :: (InputSource a, ShellCommand b) => a -> b -> InputCommand a b
+(>|-) = InputCommand
+
+{-
+-- TODO: OutputSink, (-|>), and IO types for all
+-- example: runIO $ getChanContents c >|- ... -|- ... -|>  writeList2Chan c'
+-}
 
 {- | Function to use when there is nothing for the child to do -}
 nullChildFunc :: IO ()
