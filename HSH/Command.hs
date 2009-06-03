@@ -72,27 +72,38 @@ infixr 6 -|-
 
 {- | The main type for communicating between commands.  All are expected to
 be lazy. -}
-class Channel a where
-    chanAsString :: a -> IO String
-    chanAsBSL :: a -> IO BSL.ByteString
-    chanToHandle :: Handle -> a -> IO ()
+data Channel = ChanString String
+             | ChanBSL BSL.ByteString
+             | ChanHandle Handle
 
-instance Channel String where 
-    chanAsString = return . id
-    chanAsBSL = return . str2bsl
-    chanToHandle = hPutStr
+chanAsString :: Channel -> IO String
+chanAsString (ChanString s) = return s
+chanAsString (ChanBSL s) = return . bsl2str $ s
+chanAsString (ChanHandle h) = hGetContents h
 
-instance Channel BSL.ByteString where
-    chanAsString = return . bsl2str
-    chanAsBSL = return . id
-    chanToHandle = BSL.hPutStr
+chanAsBSL :: Channel -> IO BSL.ByteString
+chanAsBSL (ChanString s) = return . str2bsl $ s
+chanAsBSL (ChanBSL s) = return s
+chanAsBSL (ChanHandle h) = BSL.hGetContents h
 
-instance Channel Handle where
-    chanAsString = hGetContents
-    chanAsBSL = BSL.hGetContents
-    chanToHandle desthdl srchdl = forkIO copier
-        where copier = do c <- BSL.hGetContents srchdl
-                          BSL.hPut desthdl c
+{- | Writes the Channel to the given Handle. -}
+chanToHandle :: Channel -> Handle -> IO ()
+chanToHandle (ChanString s) h = hPutStr h s
+chanToHandle (ChanBSL s) h = BSL.hPut h s
+chanToHandle (ChanHandle srchdl) desthdl = forkIO copier
+    where copier = do c <- BSL.hGetContents srchdl
+                      BSL.hPut desthdl c
+
+class Channelizable a where
+    toChannel :: a -> Channel
+instance Channelizable String where
+    toChannel = ChanString
+instance Channelizable BSL.ByteString where
+    toChannel = ChanBSL
+instance Channelizable Handle where
+    toChannel = ChanHandle
+instance Channelizable BS.ByteString where
+    toChannel bs = ChanBSL . fromChunks $ [bs]
 
 {- | Result type for shell commands.  The String is the text description of
 the command, not its output. -}
@@ -135,11 +146,11 @@ Some pre-defined instance functions include:
    such as bare Strings, which represent a command name.
 
 -}
-class (Show a, Channel i, Channel o) => ShellCommand a i o where
+class (Show a) => ShellCommand a where
     {- | Invoke a command. -}
     fdInvoke :: a               -- ^ The command
-             -> i               -- ^ Where to read input from
-             -> IO (o, [InvokeResult]) -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
+             -> Channel         -- ^ Where to read input from
+             -> IO (Channel, [InvokeResult]) -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show (Handle -> Handle -> IO ()) where
     show _ = "(Handle -> Handle -> IO ())"
@@ -227,18 +238,28 @@ instance ShellCommand (() -> BS.ByteString) where
             where iofunc :: () -> IO BS.ByteString
                   iofunc = return . func
 
+{-
 instance ShellCommand (Handle -> Handle -> IO ()) where
-    fdInvoke func hstdin hstdout =
+    fdInvoke func cstdin cstdout =
         runInThread (show func) (func hstdin hstdout)
+-}
 
+genericStringlikeIO :: (Show (a -> IO a), Channelizable a) =>
+                       (Channel -> IO a)
+                    -> (a -> IO a)
+                    -> IO (Channel, [InvokeResult])
+genericStringlikeIO dechanfunc userfunc cstdin =
+    do contents <- dechanfunc cstdin
+       result <- userfunc contents
+       r <- runInThread 
 genericStringlikeIO :: (Show (a -> IO a)) => 
                        (Handle -> IO a) 
                     -> (Handle -> a -> IO ()) 
                     -> (a -> IO a) 
-                    -> Handle
-                    -> Handle
+                    -> Channel
+                    -> Channel
                     -> IO [InvokeResult]
-genericStringlikeIO getcontentsfunc hputstrfunc func hstdin hstdout  =
+genericStringlikeIO getcontentsfunc hputstrfunc func cstdin cstdout =
     do r <- fdInvoke realfunc hstdin hstdout
 
        -- Correct the function name in the result and return it
@@ -717,7 +738,7 @@ runSL cmd =
 running the code, traps execptions, the works. -}
 runInThread :: String           -- ^ Description of this function
             -> (IO ())          -- ^ The action to run in the thread
-            -> IO (Channel, [InvokeResult])
+            -> IO ([InvokeResult])
 runInThread descrip func =
     do mvar <- newEmptyMVar
        forkIO (realThreadFunc mvar)
