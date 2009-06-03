@@ -70,6 +70,30 @@ infixl 4 >|-
 infixr 6 -|-
 --infixr 5 -|>    {- TODO -}
 
+{- | The main type for communicating between commands.  All are expected to
+be lazy. -}
+class Channel a where
+    chanAsString :: a -> IO String
+    chanAsBSL :: a -> IO BSL.ByteString
+    chanToHandle :: Handle -> a -> IO ()
+
+instance Channel String where 
+    chanAsString = return . id
+    chanAsBSL = return . str2bsl
+    chanToHandle = hPutStr
+
+instance Channel BSL.ByteString where
+    chanAsString = return . bsl2str
+    chanAsBSL = return . id
+    chanToHandle = BSL.hPutStr
+
+instance Channel Handle where
+    chanAsString = hGetContents
+    chanAsBSL = BSL.hGetContents
+    chanToHandle desthdl srchdl = forkIO copier
+        where copier = do c <- BSL.hGetContents srchdl
+                          BSL.hPut desthdl c
+
 {- | Result type for shell commands.  The String is the text description of
 the command, not its output. -}
 type InvokeResult = (String, IO ExitCode)
@@ -111,12 +135,11 @@ Some pre-defined instance functions include:
    such as bare Strings, which represent a command name.
 
 -}
-class (Show a) => ShellCommand a where
+class (Show a, Channel i, Channel o) => ShellCommand a i o where
     {- | Invoke a command. -}
     fdInvoke :: a               -- ^ The command
-             -> Handle          -- ^ fd to pass to it as stdin
-             -> Handle          -- ^ fd to pass to it as stdout
-             -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
+             -> i               -- ^ Where to read input from
+             -> IO (o, [InvokeResult]) -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show (Handle -> Handle -> IO ()) where
     show _ = "(Handle -> Handle -> IO ())"
@@ -694,7 +717,7 @@ runSL cmd =
 running the code, traps execptions, the works. -}
 runInThread :: String           -- ^ Description of this function
             -> (IO ())          -- ^ The action to run in the thread
-            -> IO [InvokeResult]
+            -> IO (Channel, [InvokeResult])
 runInThread descrip func =
     do mvar <- newEmptyMVar
        forkIO (realThreadFunc mvar)
