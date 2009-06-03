@@ -309,56 +309,47 @@ instance ShellCommand (() -> IO [String]) where
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand (String, [String]) where
-    fdInvoke pc@(cmd, args) fstdin fstdout childclosefds childfunc =
-        do d $ "S Before fork for " ++ show pc
-           p <- try (forkProcess childstuff)
-           pid <- case p of
-                    Right x -> return x
-                    Left x -> fail $ "Error in fork: " ++ show x
-           d $ "SP New pid " ++ show pid ++ " for " ++ show pc
-           return $ seq pid pid
-           return [(show (cmd, args),
-                   getProcessStatus True False pid >>=
-                                        (return . forceMaybe))]
-
-        where
-              childstuff = do d $ "SC preparing to redir"
-                              d $ "SC input is on " ++ show fstdin
-                              d $ "SC output is on " ++ show fstdout
-                              redir fstdin stdInput
-                              redir fstdout stdOutput
-                              closefds childclosefds [fstdin, fstdout, 0, 1]
-                              childfunc
-                              dr ("RUN: " ++ cmd ++ " " ++ (show args))
-                              executeFile cmd True args Nothing
+    fdInvoke (fp, args) = genericCommand (RawCommand fp args)
 
 {- | An instance of 'ShellCommand' for an external command.  The
 String is split using words to the command to run, and the arguments, if any. -}
 instance ShellCommand String where
-    fdInvoke cmdline ifd ofd closefd forkfunc =
-        do esh <- getEnv "SHELL"
-           let sh = case esh of
-                      Nothing -> "/bin/sh"
-                      Just x -> x
-           fdInvoke (sh, ["-c", cmdline]) ifd ofd closefd forkfunc
+    fdInvoke cmd = genericCommand (ShellCommand cmd)
 
-redir :: Fd -> Fd -> IO ()
-redir fromfd tofd
-    | fromfd == tofd = do d $ "ignoring identical redir " ++ show fromfd
-                          return ()
-    | otherwise = do d $ "running dupTo " ++ show (fromfd, tofd)
-                     dupTo fromfd tofd
-                     closeFd fromfd
+{- | How to we handle and external command. -}
+genericCommand :: CmdSpec 
+               -> Channel
+               -> IO (Channel, [InvokeResult])
 
-closefds :: [Fd]                   -- ^ List of Fds to possibly close
-         -> [Fd]                   -- ^ List of Fds to not touch, ever
-         -> IO ()
-closefds inpclosefds noclosefds =
-    do d $ "closefds " ++ show uclosefds ++ " " ++ show noclosefds
-       mapM_ closeit . filter (\x -> not (x `elem` noclosefds)) $ uclosefds
-    where closeit fd = do d $ "Closing fd " ++ show fd
-                          closeFd fd
-          uclosefds = uniq inpclosefds
+-- Handling external command when stdin channel is a Handle
+genericCommand c (ChanHandle ih) =
+    let cp = CreateProcess {cmdspec = c,
+                            cwd = Nothing,
+                            env = Nothing,
+                            std_in = UseHandle ih,
+                            std_out = CreatePipe,
+                            std_err = Inherit,
+                            close_fds = True}
+    in do (_, oh', _, ph) <- createProcess cp
+          let oh = fromJust oh'
+          return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
+genericCommand cspec ichan = 
+    let cp = CreateProcess {cmdspec = cspec,
+                            cwd = Nothing,
+                            env = Nothing,
+                            std_in = CreatePipe,
+                            std_out = CreatePipe,
+                            std_err = Inherit,
+                            close_fds = True}
+    in do (ih', oh', _, ph) <- createProcess cp
+          let ih = fromJust ih'
+          let oh = fromJust oh'
+          chanToHandle ichan ih
+          return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
+
+printCmdSpec :: CmdSpec -> String
+printCmdSpec (ShellCommand s) = s
+printCmdSpec (RawCommand fp args) = show (fp, args)
 
 data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
    deriving Show
