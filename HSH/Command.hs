@@ -231,7 +231,7 @@ instance ShellCommand (() -> BS.ByteString) where
 {-
 instance ShellCommand (Handle -> Handle -> IO ()) where
     fdInvoke func cstdin cstdout =
-        runInThread (show func) (func hstdin hstdout)
+        runInHandler (show func) (func hstdin hstdout)
 -}
 
 genericStringlikeIO :: (Show (a -> IO a), Channelizable a) =>
@@ -241,7 +241,7 @@ genericStringlikeIO :: (Show (a -> IO a), Channelizable a) =>
                     -> IO (Channel, [InvokeResult])
 genericStringlikeIO dechanfunc userfunc cstdin =
     do contents <- dechanfunc cstdin
-       runInThread (show userfunc) (realfunc contents)
+       runInHandler (show userfunc) (realfunc contents)
     where realfunc contents = do r <- userfunc contents
                                  return (toChannel r)
 
@@ -250,7 +250,7 @@ genericStringlikeO :: (Show (() -> IO a), Channelizable a) =>
                    -> Channel
                    -> IO (Channel, [InvokeResult])
 genericStringlikeO userfunc _ =
-    runInThread (show userfunc) realfunc
+    runInHandler (show userfunc) realfunc
         where realfunc = do r <- userfunc
                             return (toChannel r)
 
@@ -561,21 +561,18 @@ running the code, traps execptions, the works.
 
 Note that if func is lazy, such as a getContents sort of thing,
 the exception may go uncaught here.
+
+NOTE: expects func to be lazy!
  -}
-runInThread :: String           -- ^ Description of this function
+runInHandler :: String           -- ^ Description of this function
             -> (IO Channel)     -- ^ The action to run in the thread
             -> IO (Channel, [InvokeResult])
-runInThread descrip func =
-    do mvar <- (newEmptyMVar :: IO (MVar (Either ExitCode Channel)))
-       forkIO (realThreadFunc mvar)
-       return [(descrip, takeMVar mvar)]
-    where realThreadFunc mvar = 
-              catch (realfunc mvar) (exchandler mvar)
-          realfunc mvar = do r <- func
-                             putMVar mvar (Right r)
-          exchandler :: MVar (Either ExitCode Channel) -> SomeException -> IO ()
-          exchandler mvar e = do em $ "runInThread/" ++ descrip ++ ": " ++ show em
-                                 putMVar mvar (Left 1)
+runInHandler descrip func =
+    catch (realfunc) (exchandler)
+    where realfunc = do r <- func
+                        return (r, [(descrip, ExitSuccess)])
+          exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show em
+                            return (ChanString "", [ExitFailure 1])
 
 str2bsl :: String -> BSL.ByteString
 str2bsl = UTF8.fromString
