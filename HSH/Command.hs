@@ -351,23 +351,19 @@ printCmdSpec :: CmdSpec -> String
 printCmdSpec (ShellCommand s) = s
 printCmdSpec (RawCommand fp args) = show (fp, args)
 
+------------------------------------------------------------
+-- Pipes
+------------------------------------------------------------
+
 data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
    deriving Show
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout childclosefds forkfunc =
-        do d $ "*** Handling pipe: " ++ show pc
-           (reader, writer) <- createPipe
-           let allfdstoclose = reader : writer : fstdin : fstdout : childclosefds
-           d $ "pipd fdInvoke: New pipe endpoints: " ++ show (reader, writer)
-           res1 <- fdInvoke cmd1 fstdin writer allfdstoclose forkfunc
-           res2 <- fdInvoke cmd2 reader fstdout allfdstoclose forkfunc
-           d $ "pipe fdInvoke: Parent closing " ++ show [reader, writer]
-           mapM_ closeFd [reader, writer]
-
-           d $ "*** Done handling pipe " ++ show pc
-           return $ res1 ++ res2
+    fdInvoke pc@(PipeCommand cmd1 cmd2) ichan =
+        do (chan1, res1) <- fdInvoke cmd1 ichan
+           (chan2, res2) <- fdInvoke cmd2 chan1
+           return (chan2, res1 ++ res2)
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
