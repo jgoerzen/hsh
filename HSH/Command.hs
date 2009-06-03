@@ -34,20 +34,17 @@ module HSH.Command (ShellCommand(..),
 -- import System.IO.Utils
 import System.IO
 import System.Exit
-import System.Posix.Types
-import System.Posix.IO
-import System.Posix.Process
 import System.Log.Logger
 import System.IO.Error
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
 import Control.Exception(evaluate)
-import System.Posix.Env
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)
 import Control.Concurrent
+import System.Process
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 
@@ -355,10 +352,6 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
 (-|-) = PipeCommand
 
-{- | Function to use when there is nothing for the child to do -}
-nullChildFunc :: IO ()
-nullChildFunc = return ()
-
 {- | Different ways to get data from 'run'.
 
  * IO () runs, throws an exception on error, and sends stdout to stdout
@@ -369,20 +362,20 @@ nullChildFunc = return ()
  * IO [String] is same as IO String, but returns the results as lines.
    Note: this output is not lazy.
 
- * IO ProcessStatus runs and returns a ProcessStatus with the exit
+ * IO ExitCode runs and returns an ExitCode with the exit
    information.  stdout is sent to stdout.  Exceptions are not thrown.
 
- * IO (String, ProcessStatus) is like IO ProcessStatus, but also
+ * IO (String, ExitCode) is like IO ExitCod, but also
    includes a description of the last command in the pipe to have
    an error (or the last command, if there was no error).
 
  * IO ByteString and are similar to their String counterparts.
 
- * IO (String, IO (String, ProcessStatus)) returns a String read lazily
+ * IO (String, IO (String, ExitCode)) returns a String read lazily
    and an IO action that, when evaluated, finishes up the process and
    results in its exit status.  This command returns immediately.
 
- * IO (IO (String, ProcessStatus)) sends stdout to stdout but returns
+ * IO (IO (String, ExitCode)) sends stdout to stdout but returns
    immediately.  It forks off the child but does not wait for it to finish.
    You can use 'checkResults' to wait for the finish.
 
@@ -403,21 +396,19 @@ class RunResult a where
 instance RunResult (IO ()) where
     run cmd = run cmd >>= checkResults
 
-instance RunResult (IO (String, ProcessStatus)) where
+instance RunResult (IO (String, ExitCode)) where
     run cmd =
-        do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
+        do r <- fdInvoke cmd (ChanHandle stdInput)
            processResults r
 
-instance RunResult (IO ProcessStatus) where
-    run cmd = ((run cmd)::IO (String, ProcessStatus)) >>= return . snd
+instance RunResult (IO ExitCode) where
+    run cmd = ((run cmd)::IO (String, ExitCode)) >>= return . snd
 
 instance RunResult (IO Int) where
     run cmd = do rc <- run cmd
                  case rc of
-                   Exited (ExitSuccess) -> return 0
-                   Exited (ExitFailure x) -> return x
-                   Terminated x -> return (128 + (fromIntegral x))
-                   Stopped x -> return (128 + (fromIntegral x))
+                   ExitSuccess -> return 0
+                   ExitFailure x -> return x
 
 instance RunResult (IO Bool) where
     run cmd = do rc <- run cmd
@@ -428,57 +419,47 @@ instance RunResult (IO [String]) where
                  return (lines r)
 
 instance RunResult (IO String) where
-    run cmd = genericStringlikeResult hGetContents (\c -> evaluate (length c))
+    run cmd = genericStringlikeResult chanAsString (\c -> evaluate (length c))
               cmd
 
 instance RunResult (IO BSL.ByteString) where
-    run cmd = genericStringlikeResult BSL.hGetContents 
+    run cmd = genericStringlikeResult chanAsBSL
               (\c -> evaluate (BSL.length c))
               cmd
 
 instance RunResult (IO BS.ByteString) where
-    run cmd = genericStringlikeResult BS.hGetContents
+    run cmd = genericStringlikeResult chanAsBS
               (\c -> evaluate (BS.length c))
               cmd
 
-instance RunResult (IO (String, IO (String, ProcessStatus))) where
-    run cmd = intermediateStringlikeResult hGetContents cmd
+instance RunResult (IO (String, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResult chanAsString cmd
 
-instance RunResult (IO (BSL.ByteString, IO (String, ProcessStatus))) where
-    run cmd = intermediateStringlikeResult BSL.hGetContents cmd
+instance RunResult (IO (BSL.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResult chanAsBSL cmd
 
-instance RunResult (IO (BS.ByteString, IO (String, ProcessStatus))) where
-    run cmd = intermediateStringlikeResult BS.hGetContents cmd
+instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResult chanAsBS cmd
 
-instance RunResult (IO (IO (String, ProcessStatus))) where
-    run cmd = do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
+instance RunResult (IO (IO (String, ExitCode))) where
+    run cmd = do r <- fdInvoke cmd (ChanHandle stdInput)
                  return (processResults r)
 
 intermediateStringlikeResult :: ShellCommand b =>
-                                (Handle -> IO a)
+                                (Channel -> IO a)
                              -> b
-                             -> IO (a, IO (String, ProcessStatus))
-intermediateStringlikeResult hgetcontentsfunc cmd =
-        do (pread, pwrite) <- createPipe
-           -- d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
-           -- d "runS 1"
-           r <- fdInvoke cmd stdInput pwrite [pread, pwrite] nullChildFunc
-           -- d $ "runS 2 closing " ++ show pwrite
-           closeFd pwrite
-           -- d "runS 3"
-           hread <- fdToHandle pread
-           hSetBuffering hread NoBuffering
-           -- d "runS 4"
-           c <- hgetcontentsfunc hread
-           -- d "runS 5"
+                             -> IO (a, IO (String, ExitCode))
+intermediateStringlikeResult chanfunc cmd =
+        do (ochan, r) <- fdInvoke cmd (ChanHandle stdInput)
+           c <- chanfunc ochan
            return (c, processResults r)
 
 genericStringlikeResult :: ShellCommand b => 
-                           (Handle -> IO a)
+                           (Channel -> IO a)
                         -> (a -> IO c)
                         -> b 
                         -> IO a
-genericStringlikeResult hgetcontentsfunc evalfunc cmd =
+genericStringlikeResult chanfunc evalfunc cmd =
         do (c, r) <- intermediateStringlikeResult hgetcontentsfunc cmd
            evalfunc c
            --evaluate (length c)
@@ -489,33 +470,35 @@ genericStringlikeResult hgetcontentsfunc evalfunc cmd =
            return c
 
 {- | Evaluates the result codes and returns an overall status -}
-processResults :: [InvokeResult] -> IO (String, ProcessStatus)
+processResults :: [InvokeResult] -> IO (String, ExitCode)
 processResults r =
     do rc <- mapM procresult r
        case catMaybes rc of
-         [] -> return (fst (last r), Exited (ExitSuccess))
+         [] -> return (fst (last r), ExitSuccess)
          x -> return (last x)
-    where procresult :: InvokeResult -> IO (Maybe (String, ProcessStatus))
+    where procresult :: InvokeResult -> IO (Maybe (String, ExitCode))
           procresult (cmd, action) =
               do rc <- action
                  return $ case rc of
-                   Exited (ExitSuccess) -> Nothing
+                   ExitSuccess -> Nothing
                    x -> Just (cmd, x)
 
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
-checkResults :: (String, ProcessStatus) -> IO ()
+checkResults :: (String, ExitCode) -> IO ()
 checkResults (cmd, ps) =
        case ps of
-         Exited (ExitSuccess) -> return ()
-         Exited (ExitFailure x) ->
+         ExitSuccess -> return ()
+         ExitFailure x ->
              fail $ cmd ++ ": exited with code " ++ show x
+{- FIXME: generate these again 
          Terminated sig ->
              fail $ cmd ++ ": terminated by signal " ++ show sig
          Stopped sig ->
              fail $ cmd ++ ": stopped by signal " ++ show sig
+-}
 
 {- | Handle an exception derived from a program exiting abnormally -}
-tryEC :: IO a -> IO (Either ProcessStatus a)
+tryEC :: IO a -> IO (Either ExitCode a)
 tryEC action =
     do r <- try action
        case r of
@@ -527,11 +510,11 @@ tryEC action =
           else ioError ioe      -- not ours; re-raise it
          Right result -> return (Right result)
     where pat = ": exited with code [0-9]+$|: terminated by signal ([0-9]+)$|: stopped by signal [0-9]+"
-          proc :: String -> ProcessStatus
+          proc :: String -> ExitCode
           proc e
-              | e =~ "^: exited" = Exited (ExitFailure (str2ec e))
-              | e =~ "^: terminated by signal" = Terminated (str2ec e)
-              | e =~ "^: stopped by signal" = Stopped (str2ec e)
+              | e =~ "^: exited" = ExitFailure (str2ec e)
+--              | e =~ "^: terminated by signal" = Terminated (str2ec e)
+--              | e =~ "^: stopped by signal" = Stopped (str2ec e)
               | otherwise = error "Internal error in tryEC"
           str2ec e =
               read (e =~ "[0-9]+$")
