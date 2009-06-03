@@ -101,6 +101,7 @@ import qualified System.Path.Glob as Glob (glob)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import System.IO.Unsafe(unsafeInterleaveIO)
+import HSH.Channel
 
 {- | Return the absolute path of the arg.  Raises an error if the
 computation is impossible. -}
@@ -139,8 +140,8 @@ will be forcing Haskell to buffer the input.
 Note: buffering behavior here is untested. 
 
 See also 'catFromBS', 'catBytes' . -}
-catFrom :: [FilePath] -> String -> IO String
-catFrom = genericCatFrom readFile (++) ""
+catFrom :: [FilePath] -> Channel -> IO String
+catFrom = genericCatFrom readFile chanAsString (++) "" 
 
 {- | Copy data in chunks from stdin to stdout, optionally with a fixed
 maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
@@ -191,16 +192,19 @@ catBytesFrom' chunksize hr count hignore hw =
 
 {- | Lazy ByteString version of 'catFrom'.  This may have performance
 benefits. -}
-catFromBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
-catFromBS = genericCatFrom BSL.readFile BSL.append BSL.empty
+catFromBS :: [FilePath] -> Channel -> IO BSL.ByteString
+catFromBS = genericCatFrom BSL.readFile chanAsBSL BSL.append BSL.empty
 
-genericCatFrom :: (FilePath -> IO a) -> (a -> a -> a) -> a ->  [FilePath] -> a -> IO a
-genericCatFrom readfilefunc appendfunc empty fplist inp =
+genericCatFrom :: (FilePath -> IO a)
+               -> (Channel -> IO a)
+               -> (a -> a -> a) -> a ->  [FilePath] -> Channel -> IO a
+genericCatFrom readfilefunc chanfunc appendfunc empty fplist ichan =
     do r <- foldM foldfunc empty fplist
        return r
     where foldfunc accum fp =
                   case fp of
-                    "-" -> return (appendfunc accum inp)
+                    "-" -> do c <- chanfunc ichan
+                              return (appendfunc accum c)
                     fn -> do c <- readfilefunc fn
                              return (appendfunc accum c)
 

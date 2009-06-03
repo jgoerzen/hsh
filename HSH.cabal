@@ -23,7 +23,7 @@ flag buildtests
   default: False
 
 library
-  Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
+  Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs, HSH.Channel
   Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances, FlexibleContexts, CPP
   Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,

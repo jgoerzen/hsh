@@ -49,51 +49,12 @@ import System.Process
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
+import HSH.Channel
 
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
 em = errorM "HSH.Command"
-
-{- | The main type for communicating between commands.  All are expected to
-be lazy. -}
-data Channel = ChanString String
-             | ChanBSL BSL.ByteString
-             | ChanHandle Handle
-
-chanAsString :: Channel -> IO String
-chanAsString (ChanString s) = return s
-chanAsString (ChanBSL s) = return . bsl2str $ s
-chanAsString (ChanHandle h) = hGetContents h
-
-chanAsBSL :: Channel -> IO BSL.ByteString
-chanAsBSL (ChanString s) = return . str2bsl $ s
-chanAsBSL (ChanBSL s) = return s
-chanAsBSL (ChanHandle h) = BSL.hGetContents h
-
-chanAsBS :: Channel -> IO BS.ByteString
-chanAsBS c = do r <- chanAsBSL c
-                let contents = BSL.toChunks r
-                return . BS.concat $ contents
-
-{- | Writes the Channel to the given Handle. -}
-chanToHandle :: Channel -> Handle -> IO ()
-chanToHandle (ChanString s) h = hPutStr h s
-chanToHandle (ChanBSL s) h = BSL.hPut h s
-chanToHandle (ChanHandle srchdl) desthdl = forkIO copier >> return ()
-    where copier = do c <- BSL.hGetContents srchdl
-                      BSL.hPut desthdl c
-
-class Channelizable a where
-    toChannel :: a -> Channel
-instance Channelizable String where
-    toChannel = ChanString
-instance Channelizable BSL.ByteString where
-    toChannel = ChanBSL
-instance Channelizable Handle where
-    toChannel = ChanHandle
-instance Channelizable BS.ByteString where
-    toChannel bs = ChanBSL . BSL.fromChunks $ [bs]
 
 {- | Result type for shell commands.  The String is the text description of
 the command, not its output. -}
@@ -144,6 +105,8 @@ class (Show a) => ShellCommand a where
 
 instance Show (Handle -> Handle -> IO ()) where
     show _ = "(Handle -> Handle -> IO ())"
+instance Show (Channel -> IO Channel) where
+    show _ = "(Channel -> IO Channel)"
 instance Show (String -> String) where
     show _ = "(String -> String)"
 instance Show (() -> String) where
@@ -227,6 +190,10 @@ instance ShellCommand (() -> BS.ByteString) where
         fdInvoke iofunc
             where iofunc :: () -> IO BS.ByteString
                   iofunc = return . func
+
+instance ShellCommand (Channel -> IO Channel) where
+    fdInvoke func cstdin =
+        runInHandler (show func) (func cstdin)
 
 {-
 instance ShellCommand (Handle -> Handle -> IO ()) where
@@ -578,8 +545,3 @@ runInHandler descrip func =
           exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show e
                             return (ChanString "", [(descrip, return (ExitFailure 1))])
 
-str2bsl :: String -> BSL.ByteString
-str2bsl = UTF8.fromString
-
-bsl2str :: BSL.ByteString -> String
-bsl2str = UTF8.toString
