@@ -89,9 +89,9 @@ errortests =
     ]
     where errcase name exp cmd =
               TestLabel name $ TestCase $ 
-                        do assertRaises "runS" (IOException (userError exp))
+                        do assertRaises "runS" (userError exp)
                                         ((run cmd)::IO String)
-                           assertRaises "run" (IOException (userError exp))
+                           assertRaises "run"  (userError exp)
                                         ((run cmd)::IO ())
        
 tests = TestList
