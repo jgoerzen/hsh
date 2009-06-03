@@ -23,17 +23,18 @@ flag buildtests
   default: False
 
 library
-  Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
+  Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs, HSH.Channel
   Extensions: ExistentialQuantification, OverlappingInstances,
-    UndecidableInstances, FlexibleContexts
-  Build-Depends: base, unix, mtl, regex-compat, MissingH>=1.0.0,
-    hslogger, filepath, regex-base, regex-posix, directory, bytestring
+    UndecidableInstances, FlexibleContexts, CPP
+  Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
+    hslogger, filepath, regex-base, regex-posix, directory,
+    bytestring
   GHC-Options: -O2 -threaded -Wall
 
 Executable runtests
   if flag(buildtests)
     Buildable: True
-    Build-Depends: base, unix, mtl, regex-compat, MissingH>=1.0.0,
+    Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
       hslogger, filepath, regex-base, regex-posix, directory,
       bytestring, HUnit, testpack
   else
@@ -41,5 +42,5 @@ Executable runtests
   Main-Is: runtests.hs
   HS-Source-Dirs: testsrc, .
   Extensions: ExistentialQuantification, OverlappingInstances,
-    UndecidableInstances, FlexibleContexts
+    UndecidableInstances, FlexibleContexts, CPP
   GHC-Options: -O2 -threaded

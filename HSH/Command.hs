@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleInstances -XFlexibleContexts -XTypeSynonymInstances #-}
+{-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances #-}
 
 {- Commands for HSH
 Copyright (C) 2004-2008 John Goerzen <jgoerzen@complete.org>
@@ -7,21 +7,19 @@ Please see the COPYRIGHT file
 
 {- |
    Module     : HSH.Command
-   Copyright  : Copyright (C) 2006-2008 John Goerzen
+   Copyright  : Copyright (C) 2006-2009 John Goerzen
    License    : GNU LGPL, version 2.1 or above
 
    Maintainer : John Goerzen <jgoerzen@complete.org>
    Stability  : provisional
    Portability: portable
 
-Copyright (c) 2006-2007 John Goerzen, jgoerzen\@complete.org
+Copyright (c) 2006-2009 John Goerzen, jgoerzen\@complete.org
 -}
 
 module HSH.Command (ShellCommand(..),
                     PipeCommand(..),
-                    InputCommand(..),
                     (-|-),
-                    (>|-),
                     RunResult,
                     run,
                     runIO,
@@ -34,44 +32,33 @@ module HSH.Command (ShellCommand(..),
 
 -- import System.IO.HVIO
 -- import System.IO.Utils
+import Prelude hiding (catch)
 import System.IO
 import System.Exit
-import System.Posix.Types
-import System.Posix.IO
-import System.Posix.Process
 import System.Log.Logger
-import System.IO.Error
+import System.IO.Error hiding (catch)
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
-import Control.Concurrent(forkIO, yield, MVar, newEmptyMVar, putMVar, takeMVar)
-import Control.Exception(evaluate)
-import System.Posix.Env
+import Control.Exception(evaluate, SomeException, catch)
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)
 import Control.Concurrent
+import System.Process
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy.UTF8 as UTF8
+import HSH.Channel
 
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
-
-{- | Operator fixities.  We need one of:
-
-  a >|- b -|- c -|> d  ===   a >- ( ( b -|- c )   -|> d )
-  a >|- b -|- c -|> d  === ( a >- (   b -|- c ) ) -|> d
-
-otherwise -|- does that forkProcess stuff which breaks the threads for
-(>|-) and (-|>). -}
-infixl 4 >|-
-infixr 6 -|-
---infixr 5 -|>    {- TODO -}
+em = errorM "HSH.Command"
 
 {- | Result type for shell commands.  The String is the text description of
 the command, not its output. -}
-type InvokeResult = (String, IO ProcessStatus)
+type InvokeResult = (String, IO ExitCode)
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
@@ -113,14 +100,13 @@ Some pre-defined instance functions include:
 class (Show a) => ShellCommand a where
     {- | Invoke a command. -}
     fdInvoke :: a               -- ^ The command
-             -> Fd              -- ^ fd to pass to it as stdin
-             -> Fd              -- ^ fd to pass to it as stdout
-             -> [Fd]            -- ^ Fds to close in the child.  Will not harm Fds this child needs for stdin and stdout.
-             -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
-             -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
+             -> Channel         -- ^ Where to read input from
+             -> IO (Channel, [InvokeResult]) -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show (Handle -> Handle -> IO ()) where
     show _ = "(Handle -> Handle -> IO ())"
+instance Show (Channel -> IO Channel) where
+    show _ = "(Channel -> IO Channel)"
 instance Show (String -> String) where
     show _ = "(String -> String)"
 instance Show (() -> String) where
@@ -147,22 +133,24 @@ instance Show (() -> IO BS.ByteString) where
     show _ = "(() -> IO Data.ByteString.ByteString)"
 
 instance ShellCommand (String -> IO String) where
-    fdInvoke = genericStringlikeIO hGetContents hPutStr
+    fdInvoke = genericStringlikeIO chanAsString
 
+{- | A user function that takes no input, and generates output.  We will deal
+with it using hPutStr to send the output on. -}
 instance ShellCommand (() -> IO String) where
-    fdInvoke = genericStringlikeO hPutStr
+    fdInvoke = genericStringlikeO
 
 instance ShellCommand (BSL.ByteString -> IO BSL.ByteString) where
-    fdInvoke = genericStringlikeIO BSL.hGetContents BSL.hPut
+    fdInvoke = genericStringlikeIO chanAsBSL
 
 instance ShellCommand (() -> IO BSL.ByteString) where
-    fdInvoke = genericStringlikeO BSL.hPut
+    fdInvoke = genericStringlikeO
 
 instance ShellCommand (BS.ByteString -> IO BS.ByteString) where
-    fdInvoke = genericStringlikeIO BS.hGetContents BS.hPut
+    fdInvoke = genericStringlikeIO chanAsBS
 
 instance ShellCommand (() -> IO BS.ByteString) where
-    fdInvoke = genericStringlikeO BS.hPut
+    fdInvoke = genericStringlikeO
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String.  Implement in terms of (String -> IO String) for
@@ -203,94 +191,36 @@ instance ShellCommand (() -> BS.ByteString) where
             where iofunc :: () -> IO BS.ByteString
                   iofunc = return . func
 
+instance ShellCommand (Channel -> IO Channel) where
+    fdInvoke func cstdin =
+        runInHandler (show func) (func cstdin)
+
+{-
 instance ShellCommand (Handle -> Handle -> IO ()) where
-    fdInvoke func fstdin fstdout childclosefds childfunc =
-        do p <- try (forkProcess childstuff)
-           pid <- case p of
-                    Right x -> return x
-                    Left x -> fail $ "Error in fork for func: " ++ show x
-           return $ seq pid pid
-           return [(show func,
-                    getProcessStatus True False pid >>=
-                                     (return . forceMaybe))]
-        where childstuff = do closefds childclosefds [fstdin, fstdout]
-                              hr <- fdToHandle fstdin
-                              hw <- fdToHandle fstdout
-                              childfunc
-                              func hr hw
-                              hClose hr
-                              hClose hw
+    fdInvoke func cstdin cstdout =
+        runInHandler (show func) (func hstdin hstdout)
+-}
 
-genericStringlikeIO :: (Show (a -> IO a)) => 
-                       (Handle -> IO a) 
-                    -> (Handle -> a -> IO ()) 
-                    -> (a -> IO a) 
-                    -> Fd
-                    -> Fd 
-                    -> [Fd] 
-                    -> (IO ()) 
-                    -> IO [InvokeResult]
-genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefds childfunc =
-    do r <- fdInvoke realfunc fstdin fstdout childclosefds childfunc
-       return $ map (\(_, y) -> (show func, y)) r
-    where realfunc :: Handle -> Handle -> IO ()
-          realfunc hr hw = do hSetBuffering hw LineBuffering
-                              d $ "SIOSFC Running func in child"
-                              contents <- getcontentsfunc hr
-                              d $ "SIOSFC Contents read"
-                              result <- func contents
-                              d $ "SIOSFC Func applied"
-                              hputstrfunc hw result
+genericStringlikeIO :: (Show (a -> IO a), Channelizable a) =>
+                       (Channel -> IO a)
+                    -> (a -> IO a)
+                    -> Channel
+                    -> IO (Channel, [InvokeResult])
+genericStringlikeIO dechanfunc userfunc cstdin =
+    do contents <- dechanfunc cstdin
+       runInHandler (show userfunc) (realfunc contents)
+    where realfunc contents = do r <- userfunc contents
+                                 return (toChannel r)
 
-genericStringlikeO :: (Show (() -> IO a)) =>
-                      (Handle -> a -> IO ())
-                   -> (() -> IO a)
-                   -> Fd
-                   -> Fd
-                   -> [Fd]
-                   -> (IO ())
-                   -> IO [InvokeResult]
-genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
-    do mv <- (newEmptyMVar::IO (MVar Bool))
-       -- PipeCommand's implementation will close endpoints in the parent.
-       -- We need to dup them so that they'll hang around.
-       myfstdout <- dup fstdout
-       i $ "\ngenericStringlikeO: fds " ++ show fstdout ++ " -> " ++ show myfstdout
-       hw <- fdToHandle myfstdout
-       forkIO (childthread mv hw)
-
-       -- VERY IMPORTANT: if we don't yield here, then we may return and
-       -- fds get closed before the child thread ever has a chance to run.
-       -- Results in deadlock.
-       -- The child will signal by loading up the MVar when we can proceed.
-       yield
-       takeMVar mv
-       yield
-       i $ "\ngenericSLO: after forkIO, before return"
-       return [(show func,
-                waitExit mv)]
-    where childthread mv hw =
-              do i $ "\ngenericStringlikeO thread start: " ++ show func
-                 --hw <- fdToHandle myfstdout
-                 hSetBuffering hw LineBuffering
-                 i $ "genericStringlikeO signalling parent to proceed"
-                 putMVar mv False
-                 i $ "genericStringlikeO calling childfunc"
-                 childfunc
-                 i $ "genericStringlikeO calling func"
-                 result <- func ()
-                 i $ "genericStringlikeO calling hputstrfunc"
-                 hputstrfunc hw result
-                 i $ "genericStringlikeO calling hClose"
-                 hClose hw
-                 i $ "genericStringlikeO calling putMVar"
-                 putMVar mv True
-                 i $ "genericStringlikeO child thread exiting"
-          i x = debugM "" x
-          waitExit mv = do i $ "genericStringlikeO waitExit w"
-                           takeMVar mv
-                           i $ "genericStringlikeO waitExit returning"
-                           return (Exited ExitSuccess)
+genericStringlikeO :: (Show (() -> IO a), Channelizable a) =>
+                      (() -> IO a)
+                   -> Channel
+                   -> IO (Channel, [InvokeResult])
+genericStringlikeO userfunc _ =
+    runInHandler (show userfunc) realfunc
+        where realfunc :: IO Channel
+              realfunc = do r <- userfunc ()
+                            return (toChannel r)
 
 instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
@@ -332,166 +262,65 @@ instance ShellCommand (() -> IO [String]) where
 first String is the command to run, and the list of Strings represents the
 arguments to the program, if any. -}
 instance ShellCommand (String, [String]) where
-    fdInvoke pc@(cmd, args) fstdin fstdout childclosefds childfunc =
-        do d $ "S Before fork for " ++ show pc
-           p <- try (forkProcess childstuff)
-           pid <- case p of
-                    Right x -> return x
-                    Left x -> fail $ "Error in fork: " ++ show x
-           d $ "SP New pid " ++ show pid ++ " for " ++ show pc
-           return $ seq pid pid
-           return [(show (cmd, args),
-                   getProcessStatus True False pid >>=
-                                        (return . forceMaybe))]
-
-        where
-              childstuff = do d $ "SC preparing to redir"
-                              d $ "SC input is on " ++ show fstdin
-                              d $ "SC output is on " ++ show fstdout
-                              redir fstdin stdInput
-                              redir fstdout stdOutput
-                              closefds childclosefds [fstdin, fstdout, 0, 1]
-                              childfunc
-                              dr ("RUN: " ++ cmd ++ " " ++ (show args))
-                              executeFile cmd True args Nothing
+    fdInvoke (fp, args) = genericCommand (RawCommand fp args)
 
 {- | An instance of 'ShellCommand' for an external command.  The
 String is split using words to the command to run, and the arguments, if any. -}
 instance ShellCommand String where
-    fdInvoke cmdline ifd ofd closefd forkfunc =
-        do esh <- getEnv "SHELL"
-           let sh = case esh of
-                      Nothing -> "/bin/sh"
-                      Just x -> x
-           fdInvoke (sh, ["-c", cmdline]) ifd ofd closefd forkfunc
+    fdInvoke cmd = genericCommand (ShellCommand cmd)
 
-redir :: Fd -> Fd -> IO ()
-redir fromfd tofd
-    | fromfd == tofd = do d $ "ignoring identical redir " ++ show fromfd
-                          return ()
-    | otherwise = do d $ "running dupTo " ++ show (fromfd, tofd)
-                     dupTo fromfd tofd
-                     closeFd fromfd
+{- | How to we handle and external command. -}
+genericCommand :: CmdSpec 
+               -> Channel
+               -> IO (Channel, [InvokeResult])
 
-closefds :: [Fd]                   -- ^ List of Fds to possibly close
-         -> [Fd]                   -- ^ List of Fds to not touch, ever
-         -> IO ()
-closefds inpclosefds noclosefds =
-    do d $ "closefds " ++ show uclosefds ++ " " ++ show noclosefds
-       mapM_ closeit . filter (\x -> not (x `elem` noclosefds)) $ uclosefds
-    where closeit fd = do d $ "Closing fd " ++ show fd
-                          closeFd fd
-          uclosefds = uniq inpclosefds
+-- Handling external command when stdin channel is a Handle
+genericCommand c (ChanHandle ih) =
+    let cp = CreateProcess {cmdspec = c,
+                            cwd = Nothing,
+                            env = Nothing,
+                            std_in = UseHandle ih,
+                            std_out = CreatePipe,
+                            std_err = Inherit,
+                            close_fds = True}
+    in do (_, oh', _, ph) <- createProcess cp
+          let oh = fromJust oh'
+          return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
+genericCommand cspec ichan = 
+    let cp = CreateProcess {cmdspec = cspec,
+                            cwd = Nothing,
+                            env = Nothing,
+                            std_in = CreatePipe,
+                            std_out = CreatePipe,
+                            std_err = Inherit,
+                            close_fds = True}
+    in do (ih', oh', _, ph) <- createProcess cp
+          let ih = fromJust ih'
+          let oh = fromJust oh'
+          chanToHandle ichan ih
+          return (ChanHandle oh, [(printCmdSpec cspec, waitForProcess ph)])
+
+printCmdSpec :: CmdSpec -> String
+printCmdSpec (ShellCommand s) = s
+printCmdSpec (RawCommand fp args) = show (fp, args)
+
+------------------------------------------------------------
+-- Pipes
+------------------------------------------------------------
 
 data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
    deriving Show
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke pc@(PipeCommand cmd1 cmd2) fstdin fstdout childclosefds forkfunc =
-        do d $ "*** Handling pipe: " ++ show pc
-           (reader, writer) <- createPipe
-           let allfdstoclose = reader : writer : fstdin : fstdout : childclosefds
-           d $ "pipd fdInvoke: New pipe endpoints: " ++ show (reader, writer)
-           res1 <- fdInvoke cmd1 fstdin writer allfdstoclose forkfunc
-           res2 <- fdInvoke cmd2 reader fstdout allfdstoclose forkfunc
-           d $ "pipe fdInvoke: Parent closing " ++ show [reader, writer]
-           mapM_ closeFd [reader, writer]
-
-           d $ "*** Done handling pipe " ++ show pc
-           return $ res1 ++ res2
+    fdInvoke (PipeCommand cmd1 cmd2) ichan =
+        do (chan1, res1) <- fdInvoke cmd1 ichan
+           (chan2, res2) <- fdInvoke cmd2 chan1
+           return (chan2, res1 ++ res2)
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
 (-|-) = PipeCommand
-
-{- | An input source is something we can invoke and pipe from,
-but not pipe to.  We guarantee not to 'forkProcess', in case the
-input generator needs to interact with other threads in the main
-process.  We also guarantee to 'yield' sufficiently often, so that
-our process is not blocked until the pipeline completes.
-
-Minimum implementation is 'inputInvoke'.
--}
-class Show a => InputSource a where
-    {- | Put some data into a stream. -}
-    inputInvoke :: a                   -- ^ data to write to stream
-                -> Fd                  -- ^ stream to write data to
-                -> IO InvokeResult     -- ^ wait for action
-
-{- | Instances of 'InputSource' for pure Haskell strings. -}
-instance InputSource String where
-    inputInvoke = genericStringlikeInput hPutStr
-
-instance InputSource BSL.ByteString where
-    inputInvoke = genericStringlikeInput BSL.hPut
-
-instance InputSource BS.ByteString where
-    inputInvoke = genericStringlikeInput BS.hPut
-
-{- | Instances of 'InputSource' for pure Haskell lists of strings. -}
-instance InputSource [String] where
-    inputInvoke = genericListStringlikeInput hPutStr
-
-instance InputSource [BSL.ByteString] where
-    inputInvoke = genericListStringlikeInput BSL.hPut
-
-instance InputSource [BS.ByteString] where
-    inputInvoke = genericListStringlikeInput BS.hPut
-
-{- Wait for child threads to finish before exiting the main program, by
-having each child thread write to an MVar when it completes, and have
-the main thread wait on all the MVars before exiting -}
-mvarForkIO :: a -> a -> IO i -> IO (MVar a)
-mvarForkIO success failure io = do
-  mvar <- newEmptyMVar
-  forkIO (io >> putMVar mvar success `catch` \_ -> putMVar mvar failure)
-  return mvar
-
-{- fork a writer (lightweight thread in the same process) -}
-genericStringlikeInput :: (Handle -> t -> IO i) -> t -> Fd -> IO InvokeResult
-genericStringlikeInput put str fd = do
-  mvar <- mvarForkIO (Exited (ExitSuccess)) (Exited (ExitFailure 42)) $
-    fdToHandle fd >>= \h -> put h str >> yield >> hClose h -- >> closeFd fd -- hmmm
-  return ("(InputSource String)", takeMVar mvar)
-
-{- fork a writer (lightweight thread in the same process) -}
-genericListStringlikeInput :: (Handle -> t -> IO i) -> [t] -> Fd -> IO InvokeResult
-genericListStringlikeInput put strs fd = do
-  mvar <- mvarForkIO (Exited (ExitSuccess)) (Exited (ExitFailure 43)) $
-    fdToHandle fd >>= \h -> mapM_ (\s -> put h s >> yield) strs >> hClose h -- >> closeFd fd -- hmmm
-  return ("(InputSource ListString)", takeMVar mvar)
-
-{- | Data type to hold (threaded, lazy) input to a pipeline. -}
-data (InputSource a, ShellCommand b) => InputCommand a b = InputCommand a b
-   deriving Show
-
-{- | An instance of 'ShellCommand' representing (threaded, lazy) input to a command. -}
-instance (InputSource a, ShellCommand b) => ShellCommand (InputCommand a b) where
-    fdInvoke pc@(InputCommand source cmd) fstdin fstdout childclosefds forkfunc =
-        do d $ "*** Handling pipe: " ++ show pc
-           (reader, writer) <- createPipe
-           let allfdstoclose = reader : writer : fstdin : fstdout : childclosefds
-           d $ "pipd fdInvoke: New pipe endpoints: " ++ show (reader, writer)
-           res1 <- inputInvoke source writer
-           res2 <- fdInvoke cmd reader fstdout allfdstoclose forkfunc
-           d $ "pipe fdInvoke: Parent closing " ++ show [reader]
-           mapM_ closeFd [reader] -- closing writer => invalid fd...
-           d $ "*** Done handling pipe " ++ show pc
-           return $ res1:res2
-
-{- | Pipe (threaded, lazy) input into a command. -}
-(>|-) :: (InputSource a, ShellCommand b) => a -> b -> InputCommand a b
-(>|-) = InputCommand
-
-{-
--- TODO: OutputSink, (-|>), and IO types for all
--- example: runIO $ getChanContents c >|- ... -|- ... -|>  writeList2Chan c'
--}
-
-{- | Function to use when there is nothing for the child to do -}
-nullChildFunc :: IO ()
-nullChildFunc = return ()
 
 {- | Different ways to get data from 'run'.
 
@@ -503,20 +332,20 @@ nullChildFunc = return ()
  * IO [String] is same as IO String, but returns the results as lines.
    Note: this output is not lazy.
 
- * IO ProcessStatus runs and returns a ProcessStatus with the exit
+ * IO ExitCode runs and returns an ExitCode with the exit
    information.  stdout is sent to stdout.  Exceptions are not thrown.
 
- * IO (String, ProcessStatus) is like IO ProcessStatus, but also
+ * IO (String, ExitCode) is like IO ExitCode, but also
    includes a description of the last command in the pipe to have
    an error (or the last command, if there was no error).
 
  * IO ByteString and are similar to their String counterparts.
 
- * IO (String, IO (String, ProcessStatus)) returns a String read lazily
+ * IO (String, IO (String, ExitCode)) returns a String read lazily
    and an IO action that, when evaluated, finishes up the process and
    results in its exit status.  This command returns immediately.
 
- * IO (IO (String, ProcessStatus)) sends stdout to stdout but returns
+ * IO (IO (String, ExitCode)) sends stdout to stdout but returns
    immediately.  It forks off the child but does not wait for it to finish.
    You can use 'checkResults' to wait for the finish.
 
@@ -537,21 +366,20 @@ class RunResult a where
 instance RunResult (IO ()) where
     run cmd = run cmd >>= checkResults
 
-instance RunResult (IO (String, ProcessStatus)) where
+instance RunResult (IO (String, ExitCode)) where
     run cmd =
-        do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
+        do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+           chanToHandle ochan stdout
            processResults r
 
-instance RunResult (IO ProcessStatus) where
-    run cmd = ((run cmd)::IO (String, ProcessStatus)) >>= return . snd
+instance RunResult (IO ExitCode) where
+    run cmd = ((run cmd)::IO (String, ExitCode)) >>= return . snd
 
 instance RunResult (IO Int) where
     run cmd = do rc <- run cmd
                  case rc of
-                   Exited (ExitSuccess) -> return 0
-                   Exited (ExitFailure x) -> return x
-                   Terminated x -> return (128 + (fromIntegral x))
-                   Stopped x -> return (128 + (fromIntegral x))
+                   ExitSuccess -> return 0
+                   ExitFailure x -> return x
 
 instance RunResult (IO Bool) where
     run cmd = do rc <- run cmd
@@ -562,58 +390,49 @@ instance RunResult (IO [String]) where
                  return (lines r)
 
 instance RunResult (IO String) where
-    run cmd = genericStringlikeResult hGetContents (\c -> evaluate (length c))
+    run cmd = genericStringlikeResult chanAsString (\c -> evaluate (length c))
               cmd
 
 instance RunResult (IO BSL.ByteString) where
-    run cmd = genericStringlikeResult BSL.hGetContents 
+    run cmd = genericStringlikeResult chanAsBSL
               (\c -> evaluate (BSL.length c))
               cmd
 
 instance RunResult (IO BS.ByteString) where
-    run cmd = genericStringlikeResult BS.hGetContents
+    run cmd = genericStringlikeResult chanAsBS
               (\c -> evaluate (BS.length c))
               cmd
 
-instance RunResult (IO (String, IO (String, ProcessStatus))) where
-    run cmd = intermediateStringlikeResult hGetContents cmd
+instance RunResult (IO (String, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResult chanAsString cmd
 
-instance RunResult (IO (BSL.ByteString, IO (String, ProcessStatus))) where
-    run cmd = intermediateStringlikeResult BSL.hGetContents cmd
+instance RunResult (IO (BSL.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResult chanAsBSL cmd
 
-instance RunResult (IO (BS.ByteString, IO (String, ProcessStatus))) where
-    run cmd = intermediateStringlikeResult BS.hGetContents cmd
+instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResult chanAsBS cmd
 
-instance RunResult (IO (IO (String, ProcessStatus))) where
-    run cmd = do r <- fdInvoke cmd stdInput stdOutput [] nullChildFunc
+instance RunResult (IO (IO (String, ExitCode))) where
+    run cmd = do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+                 chanToHandle ochan stdout
                  return (processResults r)
 
 intermediateStringlikeResult :: ShellCommand b =>
-                                (Handle -> IO a)
+                                (Channel -> IO a)
                              -> b
-                             -> IO (a, IO (String, ProcessStatus))
-intermediateStringlikeResult hgetcontentsfunc cmd =
-        do (pread, pwrite) <- createPipe
-           -- d $ "runS: new pipe endpoints: " ++ show [pread, pwrite]
-           -- d "runS 1"
-           r <- fdInvoke cmd stdInput pwrite [pread, pwrite] nullChildFunc
-           -- d $ "runS 2 closing " ++ show pwrite
-           closeFd pwrite
-           -- d "runS 3"
-           hread <- fdToHandle pread
-           hSetBuffering hread NoBuffering
-           -- d "runS 4"
-           c <- hgetcontentsfunc hread
-           -- d "runS 5"
+                             -> IO (a, IO (String, ExitCode))
+intermediateStringlikeResult chanfunc cmd =
+        do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+           c <- chanfunc ochan
            return (c, processResults r)
 
 genericStringlikeResult :: ShellCommand b => 
-                           (Handle -> IO a)
+                           (Channel -> IO a)
                         -> (a -> IO c)
                         -> b 
                         -> IO a
-genericStringlikeResult hgetcontentsfunc evalfunc cmd =
-        do (c, r) <- intermediateStringlikeResult hgetcontentsfunc cmd
+genericStringlikeResult chanfunc evalfunc cmd =
+        do (c, r) <- intermediateStringlikeResult chanfunc cmd
            evalfunc c
            --evaluate (length c)
            -- d "runS 6"
@@ -623,33 +442,35 @@ genericStringlikeResult hgetcontentsfunc evalfunc cmd =
            return c
 
 {- | Evaluates the result codes and returns an overall status -}
-processResults :: [InvokeResult] -> IO (String, ProcessStatus)
+processResults :: [InvokeResult] -> IO (String, ExitCode)
 processResults r =
     do rc <- mapM procresult r
        case catMaybes rc of
-         [] -> return (fst (last r), Exited (ExitSuccess))
+         [] -> return (fst (last r), ExitSuccess)
          x -> return (last x)
-    where procresult :: InvokeResult -> IO (Maybe (String, ProcessStatus))
+    where procresult :: InvokeResult -> IO (Maybe (String, ExitCode))
           procresult (cmd, action) =
               do rc <- action
                  return $ case rc of
-                   Exited (ExitSuccess) -> Nothing
+                   ExitSuccess -> Nothing
                    x -> Just (cmd, x)
 
 {- | Evaluates result codes and raises an error for any bad ones it finds. -}
-checkResults :: (String, ProcessStatus) -> IO ()
+checkResults :: (String, ExitCode) -> IO ()
 checkResults (cmd, ps) =
        case ps of
-         Exited (ExitSuccess) -> return ()
-         Exited (ExitFailure x) ->
+         ExitSuccess -> return ()
+         ExitFailure x ->
              fail $ cmd ++ ": exited with code " ++ show x
+{- FIXME: generate these again 
          Terminated sig ->
              fail $ cmd ++ ": terminated by signal " ++ show sig
          Stopped sig ->
              fail $ cmd ++ ": stopped by signal " ++ show sig
+-}
 
 {- | Handle an exception derived from a program exiting abnormally -}
-tryEC :: IO a -> IO (Either ProcessStatus a)
+tryEC :: IO a -> IO (Either ExitCode a)
 tryEC action =
     do r <- try action
        case r of
@@ -657,21 +478,21 @@ tryEC action =
           if isUserError ioe then
               case (ioeGetErrorString ioe =~~ pat) of
                 Nothing -> ioError ioe -- not ours; re-raise it
-                Just e -> return . Left . proc $ e
+                Just e -> return . Left . procit $ e
           else ioError ioe      -- not ours; re-raise it
          Right result -> return (Right result)
     where pat = ": exited with code [0-9]+$|: terminated by signal ([0-9]+)$|: stopped by signal [0-9]+"
-          proc :: String -> ProcessStatus
-          proc e
-              | e =~ "^: exited" = Exited (ExitFailure (str2ec e))
-              | e =~ "^: terminated by signal" = Terminated (str2ec e)
-              | e =~ "^: stopped by signal" = Stopped (str2ec e)
+          procit :: String -> ExitCode
+          procit e
+              | e =~ "^: exited" = ExitFailure (str2ec e)
+--              | e =~ "^: terminated by signal" = Terminated (str2ec e)
+--              | e =~ "^: stopped by signal" = Stopped (str2ec e)
               | otherwise = error "Internal error in tryEC"
           str2ec e =
               read (e =~ "[0-9]+$")
 
 {- | Catch an exception derived from a program exiting abnormally -}
-catchEC :: IO a -> (ProcessStatus -> IO a) -> IO a
+catchEC :: IO a -> (ExitCode -> IO a) -> IO a
 catchEC action handler =
     do r <- tryEC action
        case r of
@@ -703,3 +524,24 @@ runSL cmd =
     do r <- run cmd
        when (r == []) $ fail $ "runSL: no output received from " ++ show cmd
        return (rstrip . head $ r)
+
+
+{- | Convenience function to wrap a child thread.  Kicks off the thread, handles
+running the code, traps execptions, the works.
+
+Note that if func is lazy, such as a getContents sort of thing,
+the exception may go uncaught here.
+
+NOTE: expects func to be lazy!
+ -}
+runInHandler :: String           -- ^ Description of this function
+            -> (IO Channel)     -- ^ The action to run in the thread
+            -> IO (Channel, [InvokeResult])
+runInHandler descrip func =
+    catch (realfunc) (exchandler)
+    where realfunc = do r <- func
+                        return (r, [(descrip, return ExitSuccess)])
+          exchandler :: SomeException -> IO (Channel, [InvokeResult])
+          exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show e
+                            return (ChanString "", [(descrip, return (ExitFailure 1))])
+

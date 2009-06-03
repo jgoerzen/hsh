@@ -1,18 +1,18 @@
 {- Shell Equivalents
-Copyright (C) 2004-2008 John Goerzen <jgoerzen@complete.org>
+Copyright (C) 2004-2009 John Goerzen <jgoerzen@complete.org>
 Please see the COPYRIGHT file
 -}
 
 {- |
    Module     : HSH.ShellEquivs
-   Copyright  : Copyright (C) 2008 John Goerzen
+   Copyright  : Copyright (C) 2009 John Goerzen
    License    : GNU LGPL, version 2.1 or above
 
    Maintainer : John Goerzen <jgoerzen@complete.org>
    Stability  : provisional
    Portability: portable
 
-Copyright (c) 2006-2008 John Goerzen, jgoerzen\@complete.org
+Copyright (c) 2006-2009 John Goerzen, jgoerzen\@complete.org
 
 This module provides shell-like commands.  Most, but not all, are designed
 to be used directly as part of a HSH pipeline.  All may be used outside
@@ -26,13 +26,14 @@ module HSH.ShellEquivs(
                        basename,
                        bracketCD,
                        catFrom,
-                       catFromBS,
                        catBytes,
                        catBytesFrom,
                        catTo,
                        catToBS,
+#ifdef __HSH_POSIX__
                        catToFIFO,
                        catToFIFOBS,
+#endif
                        cd,
                        cut,
                        cutR,
@@ -52,8 +53,10 @@ module HSH.ShellEquivs(
                        mkdir,
                        numberLines,
                        pwd,
+#ifdef __HSH_POSIX__
                        readlink,
                        readlinkabs,
+#endif
                        rev,
                        revW,
                        space,
@@ -61,7 +64,9 @@ module HSH.ShellEquivs(
                        tac,
                        tee,
                        teeBS,
+#ifdef __HSH_POSIX__
                        teeFIFOBS,
+#endif
                        tr,
                        trd,
                        wcW,
@@ -76,19 +81,26 @@ import Text.Printf (printf)
 import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
 -- import System.FilePath (splitPath)
+
+#ifdef __HSH_POSIX__
 import System.Posix.Files (getFileStatus, isSymbolicLink, readSymbolicLink)
 import System.Posix.User (getEffectiveUserName, getUserEntryForName, homeDirectory)
 import System.Posix.Directory (createDirectory)
 import System.Posix.Types (FileMode())
 import System.Posix.IO
+-- import System.Posix.Error
+#endif
+
 import System.Path (absNormPath, bracketCWD)
 import System.Exit
 import System.IO
-import System.Posix.Error
+import System.Process
+import qualified System.Directory as SD
 import qualified System.Path.Glob as Glob (glob)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import System.IO.Unsafe(unsafeInterleaveIO)
+import HSH.Channel
 
 {- | Return the absolute path of the arg.  Raises an error if the
 computation is impossible. -}
@@ -127,8 +139,16 @@ will be forcing Haskell to buffer the input.
 Note: buffering behavior here is untested. 
 
 See also 'catFromBS', 'catBytes' . -}
-catFrom :: [FilePath] -> String -> IO String
-catFrom = genericCatFrom readFile (++) ""
+catFrom :: [FilePath] -> Channel -> IO Channel
+catFrom fplist ichan =
+    do r <- foldM foldfunc BSL.empty fplist
+       return (toChannel r)
+    where foldfunc accum fp =
+                  case fp of
+                    "-" -> do c <- chanAsBSL ichan
+                              return (BSL.append accum c)
+                    fn -> do c <- BSL.readFile fn
+                             return (BSL.append accum c)
 
 {- | Copy data in chunks from stdin to stdout, optionally with a fixed
 maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
@@ -177,21 +197,6 @@ catBytesFrom' chunksize hr count hignore hw =
                               Nothing -> Nothing
                               Just x -> Just (x - (fromIntegral newlen))
 
-{- | Lazy ByteString version of 'catFrom'.  This may have performance
-benefits. -}
-catFromBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
-catFromBS = genericCatFrom BSL.readFile BSL.append BSL.empty
-
-genericCatFrom :: (FilePath -> IO a) -> (a -> a -> a) -> a ->  [FilePath] -> a -> IO a
-genericCatFrom readfilefunc appendfunc empty fplist inp =
-    do r <- foldM foldfunc empty fplist
-       return r
-    where foldfunc accum fp =
-                  case fp of
-                    "-" -> return (appendfunc accum inp)
-                    fn -> do c <- readfilefunc fn
-                             return (appendfunc accum c)
-
 {- | Takes input, writes it to the specified file, and does not pass it on.
      The return value is the empty string.  See also 'catToBS', 
      'catToFIFO', 'tee'.  -}
@@ -206,6 +211,8 @@ catToBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
 catToBS fp inp =
     do BSL.writeFile fp inp
        return (BSL.empty)
+
+#ifdef __HSH_POSIX__
 
 {- | Like 'catTo', but opens the destination in ReadWriteMode instead of
 ReadOnlyMode.  Due to an oddity of the Haskell IO system, this is required
@@ -240,6 +247,8 @@ fifoOpen fp =
 {- | Like 'catToFIFO', but for lazy ByteStrings -}
 catToFIFOBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
 catToFIFOBS = genericCatToFIFO BSL.hPut BSL.empty
+
+#endif
 
 {- | Like 'catTo', but appends to the file. -}
 appendTo :: FilePath -> String -> IO String
@@ -338,8 +347,9 @@ The tilde with no username equates to the current user.
 Non-tilde expansion is done by the MissingH module System.Path.Glob. -}
 glob :: FilePath -> IO [FilePath]
 glob inp@('~':remainder) =
-    catch expanduser (\_ -> Glob.glob inp)
+    catch expanduser (\_ -> Glob.glob rest)
     where (username, rest) = span (/= '/') remainder
+#ifdef __HSH_POSIX__
           expanduser =
               do lookupuser <-
                      if username /= ""
@@ -347,6 +357,9 @@ glob inp@('~':remainder) =
                         else getEffectiveUserName
                  ue <- getUserEntryForName lookupuser
                  Glob.glob (homeDirectory ue ++ rest)
+#else
+          expanduser = fail "non-posix; will be caught above"
+#endif
 glob x = Glob.glob x
 
 {- | Search for the string in the lines.  Return those that match.
@@ -365,11 +378,18 @@ grepV needle = filter (not . isInfixOf needle)
 joinLines :: [String] -> [String]
 joinLines = return . concat
 
+#ifdef __HSH_POSIX__
 {- | Creates the given directory.  A value of 0o755 for mode would be typical.
 
-An alias for System.Posix.Directory.createDirectory. -}
+An alias for System.Posix.Directory.createDirectory.
+
+The second argument will be ignored on non-POSIX systems. -}
 mkdir :: FilePath -> FileMode -> IO ()
 mkdir = createDirectory
+#else
+mkdir :: FilePath -> a -> IO ()
+mkdir fp _ = SD.createDirectory fp
+#endif
 
 {- | Number each line of a file -}
 numberLines :: [String] -> [String]
@@ -379,6 +399,7 @@ numberLines = zipWith (printf "%3d %s") [(1::Int)..]
 pwd :: IO FilePath
 pwd = getCurrentDirectory
 
+#ifdef __HSH_POSIX__
 {- | Return the destination that the given symlink points to.
 
 An alias for System.Posix.Files.readSymbolicLink -}
@@ -400,6 +421,7 @@ readlinkabs inp =
                                   show (dirname inp)
                        Just x -> return x
              else abspath inp
+#endif
 
 {- | Reverse characters on each line (rev) -}
 rev, revW :: [String] -> [String]
@@ -431,11 +453,13 @@ input. -}
 teeBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
 teeBS fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
 
+#ifdef __HSH_POSIX__
 {- | FIFO-safe version of 'teeBS'.
 
 This call will BLOCK all threads on open until a reader connects. -}
 teeFIFOBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
 teeFIFOBS fplist inp = teeBSGeneric fifoOpen fplist inp
+#endif
 
 teeBSGeneric :: (FilePath -> IO Handle) -> [FilePath] -> BSL.ByteString -> IO BSL.ByteString
 teeBSGeneric openfunc fplist inp =
