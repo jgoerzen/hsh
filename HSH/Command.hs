@@ -7,14 +7,14 @@ Please see the COPYRIGHT file
 
 {- |
    Module     : HSH.Command
-   Copyright  : Copyright (C) 2006-2008 John Goerzen
+   Copyright  : Copyright (C) 2006-2009 John Goerzen
    License    : GNU LGPL, version 2.1 or above
 
    Maintainer : John Goerzen <jgoerzen@complete.org>
    Stability  : provisional
    Portability: portable
 
-Copyright (c) 2006-2007 John Goerzen, jgoerzen\@complete.org
+Copyright (c) 2006-2009 John Goerzen, jgoerzen\@complete.org
 -}
 
 module HSH.Command (ShellCommand(..),
@@ -57,6 +57,7 @@ import qualified Data.ByteString as BS
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
 dr = debugM "HSH.Command.Run"
+em = errorM "HSH.Command"
 
 {- | Operator fixities.  We need one of:
 
@@ -71,7 +72,7 @@ infixr 6 -|-
 
 {- | Result type for shell commands.  The String is the text description of
 the command, not its output. -}
-type InvokeResult = (String, IO ProcessStatus)
+type InvokeResult = (String, IO ExitCode)
 
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
@@ -113,10 +114,8 @@ Some pre-defined instance functions include:
 class (Show a) => ShellCommand a where
     {- | Invoke a command. -}
     fdInvoke :: a               -- ^ The command
-             -> Fd              -- ^ fd to pass to it as stdin
-             -> Fd              -- ^ fd to pass to it as stdout
-             -> [Fd]            -- ^ Fds to close in the child.  Will not harm Fds this child needs for stdin and stdout.
-             -> (IO ())           -- ^ Action to run post-fork in child (or in main process if it doesn't fork)
+             -> Handle          -- ^ fd to pass to it as stdin
+             -> Handle          -- ^ fd to pass to it as stdout
              -> IO [InvokeResult]           -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show (Handle -> Handle -> IO ()) where
@@ -149,6 +148,8 @@ instance Show (() -> IO BS.ByteString) where
 instance ShellCommand (String -> IO String) where
     fdInvoke = genericStringlikeIO hGetContents hPutStr
 
+{- | A user function that takes no input, and generates output.  We will deal
+with it using hPutStr to send the output on. -}
 instance ShellCommand (() -> IO String) where
     fdInvoke = genericStringlikeO hPutStr
 
@@ -204,34 +205,20 @@ instance ShellCommand (() -> BS.ByteString) where
                   iofunc = return . func
 
 instance ShellCommand (Handle -> Handle -> IO ()) where
-    fdInvoke func fstdin fstdout childclosefds childfunc =
-        do p <- try (forkProcess childstuff)
-           pid <- case p of
-                    Right x -> return x
-                    Left x -> fail $ "Error in fork for func: " ++ show x
-           return $ seq pid pid
-           return [(show func,
-                    getProcessStatus True False pid >>=
-                                     (return . forceMaybe))]
-        where childstuff = do closefds childclosefds [fstdin, fstdout]
-                              hr <- fdToHandle fstdin
-                              hw <- fdToHandle fstdout
-                              childfunc
-                              func hr hw
-                              hClose hr
-                              hClose hw
+    fdInvoke func hstdin hstdout =
+        runInThread (show func) (func hstdin hstdout)
 
 genericStringlikeIO :: (Show (a -> IO a)) => 
                        (Handle -> IO a) 
                     -> (Handle -> a -> IO ()) 
                     -> (a -> IO a) 
-                    -> Fd
-                    -> Fd 
-                    -> [Fd] 
-                    -> (IO ()) 
+                    -> Handle
+                    -> Handle
                     -> IO [InvokeResult]
-genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefds childfunc =
-    do r <- fdInvoke realfunc fstdin fstdout childclosefds childfunc
+genericStringlikeIO getcontentsfunc hputstrfunc func hstdin hstdout  =
+    do r <- fdInvoke realfunc hstdin hstdout
+
+       -- Correct the function name in the result and return it
        return $ map (\(_, y) -> (show func, y)) r
     where realfunc :: Handle -> Handle -> IO ()
           realfunc hr hw = do hSetBuffering hw LineBuffering
@@ -245,12 +232,10 @@ genericStringlikeIO getcontentsfunc hputstrfunc func fstdin fstdout childclosefd
 genericStringlikeO :: (Show (() -> IO a)) =>
                       (Handle -> a -> IO ())
                    -> (() -> IO a)
-                   -> Fd
-                   -> Fd
-                   -> [Fd]
-                   -> (IO ())
+                   -> Handle
+                   -> Handle
                    -> IO [InvokeResult]
-genericStringlikeO hputstrfunc func _ fstdout _ childfunc =
+genericStringlikeO hputstrfunc func _ hstdout =
     do mv <- (newEmptyMVar::IO (MVar Bool))
        -- PipeCommand's implementation will close endpoints in the parent.
        -- We need to dup them so that they'll hang around.
@@ -703,3 +688,19 @@ runSL cmd =
     do r <- run cmd
        when (r == []) $ fail $ "runSL: no output received from " ++ show cmd
        return (rstrip . head $ r)
+
+
+{- | Convenience function to wrap a child thread.  Kicks off the thread, handles
+running the code, traps execptions, the works. -}
+runInThread :: String           -- ^ Description of this function
+            -> (IO ())          -- ^ The action to run in the thread
+            -> IO [InvokeResult]
+runInThread descrip func =
+    do mvar <- newEmptyMVar
+       forkIO (realThreadFunc mvar)
+       return [(descrip, takeMVar mvar)]
+    where realThreadFunc mvar = 
+              do catch (func >> putMVar mvar (ExitSuccess)) (exchandler mvar)
+          exchandler mvar :: MVar ExitCode -> SomeException -> IO ()
+          exchandler mvar e = do em $ "runInThread/" ++ descrip ++ ": " ++ show em
+                                 putMVar mvar (ExitFailure 1)
