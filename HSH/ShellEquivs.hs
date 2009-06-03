@@ -35,10 +35,8 @@ module HSH.ShellEquivs(
                        catBytes,
                        catBytesFrom,
                        catTo,
-                       catToBS,
 #ifdef __HSH_POSIX__
                        catToFIFO,
-                       catToFIFOBS,
 #endif
                        cd,
                        cut,
@@ -205,18 +203,13 @@ catBytesFrom' chunksize hr count hignore hw =
 
 {- | Takes input, writes it to the specified file, and does not pass it on.
      The return value is the empty string.  See also 'catToBS', 
-     'catToFIFO', 'tee'.  -}
-catTo :: FilePath -> String -> IO String
-catTo fp inp =
-    do writeFile fp inp
-       return ""
-
-{- | Like 'catTo', but operates in a lazy ByteString.  This could be a
-performance benefit. -}
-catToBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
-catToBS fp inp =
-    do BSL.writeFile fp inp
-       return (BSL.empty)
+     'catToFIFO' -}
+catTo :: FilePath -> Channel -> IO Channel
+catTo fp ichan =
+    do ofile <- openFile fp WriteMode
+       chanToHandle ichan ofile
+       hClose ofile
+       return (ChanString "")
 
 #ifdef __HSH_POSIX__
 
@@ -230,29 +223,18 @@ This is provided in addition to 'catTo' because you may want to cat to
 something that you do not have permission to read from.
 
 See also 'catTo', 'catToFIFOBS' -}
-catToFIFO :: FilePath -> String -> IO String
-catToFIFO = genericCatToFIFO hPutStr ""
-
-genericCatToFIFO :: (Handle -> a -> IO ()) -- hPutStr function
-                 -> a                      -- empty value to return
-                 -> FilePath               -- Path
-                 -> a                      -- Value to write
-                 -> IO a
-genericCatToFIFO hputstrfunc emptyval fp inp =
+catToFIFO :: FilePath -> Channel -> IO Channel
+catToFIFO fp ichan =
     do h <- fifoOpen fp
-       hputstrfunc h inp
+       chanToHandle ichan h
        hClose h
-       return emptyval
+       return (ChanString "")
 
 fifoOpen :: FilePath -> IO Handle
 fifoOpen fp = 
     do fd <- throwErrnoPathIf (< 0) "HSH fifoOpen" fp $ 
              openFd fp WriteOnly Nothing defaultFileFlags
        fdToHandle fd
-
-{- | Like 'catToFIFO', but for lazy ByteStrings -}
-catToFIFOBS :: FilePath -> BSL.ByteString -> IO BSL.ByteString
-catToFIFOBS = genericCatToFIFO BSL.hPut BSL.empty
 
 #endif
 
