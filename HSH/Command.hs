@@ -32,14 +32,15 @@ module HSH.Command (ShellCommand(..),
 
 -- import System.IO.HVIO
 -- import System.IO.Utils
+import Prelude hiding (catch)
 import System.IO
 import System.Exit
 import System.Log.Logger
-import System.IO.Error
+import System.IO.Error hiding (catch)
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
-import Control.Exception(evaluate, SomeException)
+import Control.Exception(evaluate, SomeException, catch)
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)
@@ -79,7 +80,7 @@ chanAsBS c = do r <- chanAsBSL c
 chanToHandle :: Channel -> Handle -> IO ()
 chanToHandle (ChanString s) h = hPutStr h s
 chanToHandle (ChanBSL s) h = BSL.hPut h s
-chanToHandle (ChanHandle srchdl) desthdl = forkIO copier
+chanToHandle (ChanHandle srchdl) desthdl = forkIO copier >> return ()
     where copier = do c <- BSL.hGetContents srchdl
                       BSL.hPut desthdl c
 
@@ -556,7 +557,11 @@ runSL cmd =
 
 
 {- | Convenience function to wrap a child thread.  Kicks off the thread, handles
-running the code, traps execptions, the works. -}
+running the code, traps execptions, the works.
+
+Note that if func is lazy, such as a getContents sort of thing,
+the exception may go uncaught here.
+ -}
 runInThread :: String           -- ^ Description of this function
             -> (IO Channel)     -- ^ The action to run in the thread
             -> IO (Channel, [InvokeResult])
@@ -565,7 +570,7 @@ runInThread descrip func =
        forkIO (realThreadFunc mvar)
        return [(descrip, takeMVar mvar)]
     where realThreadFunc mvar = 
-              catch (realfunc) (exchandler mvar)
+              catch (realfunc mvar) (exchandler mvar)
           realfunc mvar = do r <- func
                              putMVar mvar (Right r)
           exchandler :: MVar (Either ExitCode Channel) -> SomeException -> IO ()
