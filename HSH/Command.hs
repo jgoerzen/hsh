@@ -47,6 +47,7 @@ import Control.Concurrent
 import System.Process
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy.UTF8 as UTF8
 
 d, dr :: String -> IO ()
 d = debugM "HSH.Command"
@@ -570,3 +571,9 @@ runInThread descrip func =
           exchandler mvar :: MVar (Either ExitCode Channel) -> SomeException -> IO ()
           exchandler mvar e = do em $ "runInThread/" ++ descrip ++ ": " ++ show em
                                  putMVar mvar (Left 1)
+
+str2bsl :: String -> BSL.ByteString
+str2bsl = UTF8.fromString
+
+bsl2str :: BSL.ByteString -> String
+bsl2str = UTF8.toString
