@@ -66,9 +66,8 @@ module HSH.ShellEquivs(
                        unspace,
                        tac,
                        tee,
-                       teeBS,
 #ifdef __HSH_POSIX__
-                       teeFIFOBS,
+                       teeFIFO,
 #endif
                        tr,
                        trd,
@@ -431,17 +430,11 @@ tac :: [String] -> [String]
 tac = reverse
 
 {- | Takes input, writes it to all the specified files, and passes it on.
-This function buffers the input.
+This function does /NOT' buffer input.
 
-See also 'teeBS', 'catFrom'. -}
-tee :: [FilePath] -> String -> IO String
-tee [] inp = return inp
-tee (x:xs) inp = writeFile x inp >> tee xs inp
-
-{- | Lazy ByteString version of 'tee'.  This function does /NOT/ buffer
-input. -}
-teeBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
-teeBS fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
+See also 'catFrom'. -}
+tee :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+tee fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
 
 #ifdef __HSH_POSIX__
 {- | FIFO-safe version of 'teeBS'.
@@ -449,8 +442,8 @@ teeBS fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
 This call will BLOCK all threads on open until a reader connects.
 
 This function is only available on POSIX platforms. -}
-teeFIFOBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
-teeFIFOBS fplist inp = teeBSGeneric fifoOpen fplist inp
+teeFIFO :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+teeFIFO fplist inp = teeBSGeneric fifoOpen fplist inp
 #endif
 
 teeBSGeneric :: (FilePath -> IO Handle) -> [FilePath] -> BSL.ByteString -> IO BSL.ByteString
