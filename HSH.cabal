@@ -25,9 +25,10 @@ flag buildtests
 library
   Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
   Extensions: ExistentialQuantification, OverlappingInstances,
-    UndecidableInstances, FlexibleContexts
+    UndecidableInstances, FlexibleContexts, CPP
   Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
-    hslogger, filepath, regex-base, regex-posix, directory, bytestring
+    hslogger, filepath, regex-base, regex-posix, directory,
+    bytestring
   GHC-Options: -O2 -threaded -Wall
 
 Executable runtests
@@ -41,5 +42,5 @@ Executable runtests
   Main-Is: runtests.hs
   HS-Source-Dirs: testsrc, .
   Extensions: ExistentialQuantification, OverlappingInstances,
-    UndecidableInstances, FlexibleContexts
+    UndecidableInstances, FlexibleContexts, CPP
   GHC-Options: -O2 -threaded
