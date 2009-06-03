@@ -570,9 +570,9 @@ runInHandler :: String           -- ^ Description of this function
 runInHandler descrip func =
     catch (realfunc) (exchandler)
     where realfunc = do r <- func
-                        return (r, [(descrip, ExitSuccess)])
-          exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show em
-                            return (ChanString "", [ExitFailure 1])
+                        return (r, [(descrip, return ExitSuccess)])
+          exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show e
+                            return (ChanString "", [(descrip, return (ExitFailure 1))])
 
 str2bsl :: String -> BSL.ByteString
 str2bsl = UTF8.fromString
