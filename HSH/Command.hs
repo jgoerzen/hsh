@@ -73,8 +73,8 @@ chanAsBSL (ChanHandle h) = BSL.hGetContents h
 
 chanAsBS :: Channel -> IO BS.ByteString
 chanAsBS c = do r <- chanAsBSL c
-                let c = BSL.toChunks r
-                return . BS.concat $ c
+                let contents = BSL.toChunks r
+                return . BS.concat $ contents
 
 {- | Writes the Channel to the given Handle. -}
 chanToHandle :: Channel -> Handle -> IO ()
@@ -346,7 +346,7 @@ data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke pc@(PipeCommand cmd1 cmd2) ichan =
+    fdInvoke (PipeCommand cmd1 cmd2) ichan =
         do (chan1, res1) <- fdInvoke cmd1 ichan
            (chan2, res2) <- fdInvoke cmd2 chan1
            return (chan2, res1 ++ res2)
@@ -511,12 +511,12 @@ tryEC action =
           if isUserError ioe then
               case (ioeGetErrorString ioe =~~ pat) of
                 Nothing -> ioError ioe -- not ours; re-raise it
-                Just e -> return . Left . proc $ e
+                Just e -> return . Left . procit $ e
           else ioError ioe      -- not ours; re-raise it
          Right result -> return (Right result)
     where pat = ": exited with code [0-9]+$|: terminated by signal ([0-9]+)$|: stopped by signal [0-9]+"
-          proc :: String -> ExitCode
-          proc e
+          procit :: String -> ExitCode
+          procit e
               | e =~ "^: exited" = ExitFailure (str2ec e)
 --              | e =~ "^: terminated by signal" = Terminated (str2ec e)
 --              | e =~ "^: stopped by signal" = Stopped (str2ec e)
