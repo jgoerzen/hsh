@@ -44,7 +44,6 @@ module HSH.ShellEquivs(
                        dirname,
                        discard,
                        echo,
-                       echoBS,
                        exit,
                        glob,
                        grep,
@@ -287,14 +286,11 @@ cutR nums delim z = drop 1 $ concat [delim:x | (x, y) <- zip string [0..], elem 
 
 The input to this function is never read.
 
+You can pass this thing a String, a ByteString, or even a Handle.
+
 See also 'echoBS'. -}
-echo :: String -> () -> String
-echo inp () = inp
-
-{- | ByteString.Lazy version of 'echo'. -}
-echoBS :: BSL.ByteString -> () -> BSL.ByteString
-echoBS inp () = inp
-
+echo :: Channelizable a => a -> Channel -> IO Channel
+echo inp _ = return . toChannel $ inp
 
 {- | Search for the regexp in the lines.  Return those that match. -}
 egrep :: String -> [String] -> [String]
