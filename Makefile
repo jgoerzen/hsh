@@ -1,4 +1,4 @@
-# Copyright (C) 2004 - 2007 John Goerzen <jgoerzen@complete.org>
+# Copyright (C) 2004 - 2009 John Goerzen <jgoerzen@complete.org>
 #
 #    This library is free software; you can redistribute it and/or
 #    modify it under the terms of the GNU Lesser General Public
@@ -13,46 +13,35 @@
 #    You should have received a copy of the GNU Lesser General Public
 #    License along with this library; if not, write to the Free Software
 #    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
-
-GHCPARMS := -fglasgow-exts
-
-.PHONY: all hugsbuild
 all: setup
+	@echo "Please use Cabal to build this package; not make."
 	./setup configure
 	./setup build
 
-hugsbuild: 
-	hugs Setup.lhs configure --hugs
-	hugs Setup.lhs build
+setup: Setup.lhs
+	ghc --make -o setup Setup.lhs
 
 install: setup
 	./setup install
 
-setup: Setup.lhs HSH.cabal
-	ghc -package Cabal Setup.lhs -o setup
-
 clean:
-	-./setup clean
-	-rm -rf html `find . -name "*.o"` `find . -name "*.hi"` \
-		`find . -name "*~"` *.a setup dist testsrc/runtests \
-		local-pkg doctmp
-	-rm -rf testtmp/* testtmp*
+	./Setup.lhs clean
 
-testsrc/runtests: all $(wildcard testsrc/*.hs) $(wildcard testsrc/*/*.hs) $(wildcard testsrc/*/*/*.hs)
-	cd testsrc && ghc --make -fglasgow-exts -package filepath -package base -package mtl -package HUnit -package MissingH -package unix -package hslogger -package regex-compat -package regex-base -package regex-posix -o runtests  -i../dist/build:.. runtests.hs
+.PHONY: test
+test: test-ghc test-hugs
+	@echo ""
+	@echo "All tests pass."
 
-test-ghc6: testsrc/runtests
-	testsrc/runtests
+test-hugs: setup
+	@echo " ****** Running hugs tests"
+	./setup configure -f buildtests --hugs
+	./setup build
+	runhugs -98 +o -P$(PWD)/dist/scratch:$(PWD)/dist/scratch/programs/runtests: \
+		dist/scratch/programs/runtests/Main.hs
 
-test-hugs: hugsbuild
-	runhugs -98 +o -P$(PWD)/dist/build:$(PWD)/testsrc: testsrc/runtests.hs
-
-interact-hugs:
-	hugs -98 +o -P$(PWD)/dist/build:
-
-interact-ghci: all
-	ghci -idist/build -Ldist/build $(GHCPARMS)
-
-interact: interact-hugs
-
-test: test-ghc6 
+test-ghc: setup
+	@echo " ****** Building GHC tests"
+	./setup configure -f buildtests
+	./setup build
+	@echo " ****** Running GHC tests"
+	./dist/build/runtests/runtests

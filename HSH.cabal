@@ -4,7 +4,7 @@ License: LGPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
 Author: John Goerzen
 Stability: Beta
-Copyright: Copyright (c) 2006-2008 John Goerzen
+Copyright: Copyright (c) 2006-2009 John Goerzen
 license-file: COPYRIGHT
 extra-source-files: COPYING
 homepage: http://software.complete.org/hsh
@@ -13,18 +13,33 @@ Description: HSH is designed to let you mix and match shell expressions with
  Haskell programs. With HSH, it is possible to easily run shell
  commands, capture their output or provide their input, and pipe them
  to and from other shell commands and arbitrary Haskell functions at will.
-Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
-Extensions: ExistentialQuantification, OverlappingInstances,
-    UndecidableInstances, FlexibleContexts
-Build-Depends: base, unix, mtl, regex-compat, MissingH>=1.0.0,
- hslogger, filepath, regex-base, regex-posix, directory, bytestring
-GHC-Options: -O2 -threaded -Wall
-Category: System
+  Category: System
+
+Cabal-Version: >=1.2.3
 Build-type: Simple
 
-Executable: runtests
-Buildable: False
-Main-Is: runtests.hs
-HS-Source-Dirs: testsrc
-Extensions: ExistentialQuantification, OverlappingInstances,
- UndecidableInstances, FlexibleContexts
+flag buildtests
+  description: Build the executable to run unit tests
+  default: False
+
+library
+  Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs
+  Extensions: ExistentialQuantification, OverlappingInstances,
+    UndecidableInstances, FlexibleContexts
+  Build-Depends: base, unix, mtl, regex-compat, MissingH>=1.0.0,
+    hslogger, filepath, regex-base, regex-posix, directory, bytestring
+  GHC-Options: -O2 -threaded -Wall
+
+Executable runtests
+  if flag(buildtests)
+    Buildable: True
+    Build-Depends: base, unix, mtl, regex-compat, MissingH>=1.0.0,
+      hslogger, filepath, regex-base, regex-posix, directory,
+      bytestring, HUnit, testpack
+  else
+    Buildable: False
+  Main-Is: runtests.hs
+  HS-Source-Dirs: testsrc, .
+  Extensions: ExistentialQuantification, OverlappingInstances,
+    UndecidableInstances, FlexibleContexts
+  GHC-Options: -O2 -threaded -Wall
