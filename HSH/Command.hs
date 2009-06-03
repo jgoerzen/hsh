@@ -86,6 +86,11 @@ chanAsBSL (ChanString s) = return . str2bsl $ s
 chanAsBSL (ChanBSL s) = return s
 chanAsBSL (ChanHandle h) = BSL.hGetContents h
 
+chanAsBS :: Channel -> IO BS.ByteString
+chanAsBS c = do r <- ChanAsBSL c
+                let c = BSL.toChunks r
+                return . BS.concat $ c
+
 {- | Writes the Channel to the given Handle. -}
 chanToHandle :: Channel -> Handle -> IO ()
 chanToHandle (ChanString s) h = hPutStr h s
@@ -180,24 +185,24 @@ instance Show (() -> IO BS.ByteString) where
     show _ = "(() -> IO Data.ByteString.ByteString)"
 
 instance ShellCommand (String -> IO String) where
-    fdInvoke = genericStringlikeIO hGetContents hPutStr
+    fdInvoke = genericStringlikeIO chanAsString
 
 {- | A user function that takes no input, and generates output.  We will deal
 with it using hPutStr to send the output on. -}
 instance ShellCommand (() -> IO String) where
-    fdInvoke = genericStringlikeO hPutStr
+    fdInvoke = genericStringlikeO
 
 instance ShellCommand (BSL.ByteString -> IO BSL.ByteString) where
-    fdInvoke = genericStringlikeIO BSL.hGetContents BSL.hPut
+    fdInvoke = genericStringlikeIO chanAsBSL
 
 instance ShellCommand (() -> IO BSL.ByteString) where
-    fdInvoke = genericStringlikeO BSL.hPut
+    fdInvoke = genericStringlikeO
 
 instance ShellCommand (BS.ByteString -> IO BS.ByteString) where
-    fdInvoke = genericStringlikeIO BS.hGetContents BS.hPut
+    fdInvoke = genericStringlikeIO chanAsBS
 
 instance ShellCommand (() -> IO BS.ByteString) where
-    fdInvoke = genericStringlikeO BS.hPut
+    fdInvoke = genericStringlikeO
 
 {- | An instance of 'ShellCommand' for a pure Haskell function mapping
 String to String.  Implement in terms of (String -> IO String) for
@@ -247,79 +252,22 @@ instance ShellCommand (Handle -> Handle -> IO ()) where
 genericStringlikeIO :: (Show (a -> IO a), Channelizable a) =>
                        (Channel -> IO a)
                     -> (a -> IO a)
+                    -> Channel
                     -> IO (Channel, [InvokeResult])
 genericStringlikeIO dechanfunc userfunc cstdin =
     do contents <- dechanfunc cstdin
-       result <- userfunc contents
-       r <- runInThread 
-genericStringlikeIO :: (Show (a -> IO a)) => 
-                       (Handle -> IO a) 
-                    -> (Handle -> a -> IO ()) 
-                    -> (a -> IO a) 
-                    -> Channel
-                    -> Channel
-                    -> IO [InvokeResult]
-genericStringlikeIO getcontentsfunc hputstrfunc func cstdin cstdout =
-    do r <- fdInvoke realfunc hstdin hstdout
+       runInThread (show userfunc) (realfunc contents)
+    where realfunc contents = do r <- userfunc contents
+                                 return (toChannel r)
 
-       -- Correct the function name in the result and return it
-       return $ map (\(_, y) -> (show func, y)) r
-    where realfunc :: Handle -> Handle -> IO ()
-          realfunc hr hw = do hSetBuffering hw LineBuffering
-                              d $ "SIOSFC Running func in child"
-                              contents <- getcontentsfunc hr
-                              d $ "SIOSFC Contents read"
-                              result <- func contents
-                              d $ "SIOSFC Func applied"
-                              hputstrfunc hw result
-
-genericStringlikeO :: (Show (() -> IO a)) =>
-                      (Handle -> a -> IO ())
-                   -> (() -> IO a)
-                   -> Handle
-                   -> Handle
-                   -> IO [InvokeResult]
-genericStringlikeO hputstrfunc func _ hstdout =
-    do mv <- (newEmptyMVar::IO (MVar Bool))
-       -- PipeCommand's implementation will close endpoints in the parent.
-       -- We need to dup them so that they'll hang around.
-       myfstdout <- dup fstdout
-       i $ "\ngenericStringlikeO: fds " ++ show fstdout ++ " -> " ++ show myfstdout
-       hw <- fdToHandle myfstdout
-       forkIO (childthread mv hw)
-
-       -- VERY IMPORTANT: if we don't yield here, then we may return and
-       -- fds get closed before the child thread ever has a chance to run.
-       -- Results in deadlock.
-       -- The child will signal by loading up the MVar when we can proceed.
-       yield
-       takeMVar mv
-       yield
-       i $ "\ngenericSLO: after forkIO, before return"
-       return [(show func,
-                waitExit mv)]
-    where childthread mv hw =
-              do i $ "\ngenericStringlikeO thread start: " ++ show func
-                 --hw <- fdToHandle myfstdout
-                 hSetBuffering hw LineBuffering
-                 i $ "genericStringlikeO signalling parent to proceed"
-                 putMVar mv False
-                 i $ "genericStringlikeO calling childfunc"
-                 childfunc
-                 i $ "genericStringlikeO calling func"
-                 result <- func ()
-                 i $ "genericStringlikeO calling hputstrfunc"
-                 hputstrfunc hw result
-                 i $ "genericStringlikeO calling hClose"
-                 hClose hw
-                 i $ "genericStringlikeO calling putMVar"
-                 putMVar mv True
-                 i $ "genericStringlikeO child thread exiting"
-          i x = debugM "" x
-          waitExit mv = do i $ "genericStringlikeO waitExit w"
-                           takeMVar mv
-                           i $ "genericStringlikeO waitExit returning"
-                           return (Exited ExitSuccess)
+genericStringlikeO :: (Show (() -> IO a), Channelizable a) =>
+                      (() -> IO a)
+                   -> Channel
+                   -> IO (Channel, [InvokeResult])
+genericStringlikeO userfunc _ =
+    runInThread (show userfunc) realfunc
+        where realfunc = do r <- userfunc
+                            return (toChannel r)
 
 instance Show ([String] -> [String]) where
     show _ = "([String] -> [String])"
@@ -737,14 +685,16 @@ runSL cmd =
 {- | Convenience function to wrap a child thread.  Kicks off the thread, handles
 running the code, traps execptions, the works. -}
 runInThread :: String           -- ^ Description of this function
-            -> (IO ())          -- ^ The action to run in the thread
-            -> IO ([InvokeResult])
+            -> (IO Channel)     -- ^ The action to run in the thread
+            -> IO (Channel, [InvokeResult])
 runInThread descrip func =
-    do mvar <- newEmptyMVar
+    do mvar <- (newEmptyMVar :: IO (MVar (Either ExitCode Channel))
        forkIO (realThreadFunc mvar)
        return [(descrip, takeMVar mvar)]
     where realThreadFunc mvar = 
-              do catch (func >> putMVar mvar (ExitSuccess)) (exchandler mvar)
-          exchandler mvar :: MVar ExitCode -> SomeException -> IO ()
+              catch (realfunc) (exchandler mvar)
+          realfunc mvar = do r <- func
+                             putMVar mvar (Right r)
+          exchandler mvar :: MVar (Either ExitCode Channel) -> SomeException -> IO ()
           exchandler mvar e = do em $ "runInThread/" ++ descrip ++ ": " ++ show em
-                                 putMVar mvar (ExitFailure 1)
+                                 putMVar mvar (Left 1)
