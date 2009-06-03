@@ -251,7 +251,8 @@ genericStringlikeO :: (Show (() -> IO a), Channelizable a) =>
                    -> IO (Channel, [InvokeResult])
 genericStringlikeO userfunc _ =
     runInHandler (show userfunc) realfunc
-        where realfunc = do r <- userfunc
+        where realfunc :: IO Channel
+              realfunc = do r <- userfunc ()
                             return (toChannel r)
 
 instance Show ([String] -> [String]) where
@@ -367,7 +368,7 @@ instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) wher
  * IO ExitCode runs and returns an ExitCode with the exit
    information.  stdout is sent to stdout.  Exceptions are not thrown.
 
- * IO (String, ExitCode) is like IO ExitCod, but also
+ * IO (String, ExitCode) is like IO ExitCode, but also
    includes a description of the last command in the pipe to have
    an error (or the last command, if there was no error).
 
@@ -400,7 +401,8 @@ instance RunResult (IO ()) where
 
 instance RunResult (IO (String, ExitCode)) where
     run cmd =
-        do r <- fdInvoke cmd (ChanHandle stdin)
+        do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+           chanToHandle ochan stdout
            processResults r
 
 instance RunResult (IO ExitCode) where
@@ -444,7 +446,8 @@ instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsBS cmd
 
 instance RunResult (IO (IO (String, ExitCode))) where
-    run cmd = do r <- fdInvoke cmd (ChanHandle stdin)
+    run cmd = do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+                 chanToHandle ochan stdout
                  return (processResults r)
 
 intermediateStringlikeResult :: ShellCommand b =>
