@@ -574,6 +574,7 @@ runInHandler descrip func =
     catch (realfunc) (exchandler)
     where realfunc = do r <- func
                         return (r, [(descrip, return ExitSuccess)])
+          exchandler :: SomeException -> IO (Channel, [InvokeResult])
           exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show e
                             return (ChanString "", [(descrip, return (ExitFailure 1))])
 
