@@ -42,4 +42,4 @@ Executable runtests
   HS-Source-Dirs: testsrc, .
   Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances, FlexibleContexts
-  GHC-Options: -O2 -threaded -Wall
+  GHC-Options: -O2 -threaded

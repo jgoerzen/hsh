@@ -5,7 +5,7 @@ Please see the COPYRIGHT file
 
 module Core(tests) where
 import Test.HUnit
-import Test.HUnit.Utils
+import Test.HUnit.Tools
 import HSH
 import HSH.ShellEquivs
 import TestUtils
