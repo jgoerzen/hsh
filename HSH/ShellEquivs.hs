@@ -221,7 +221,9 @@ This call will BLOCK all threads on open until a reader connects.
 This is provided in addition to 'catTo' because you may want to cat to
 something that you do not have permission to read from.
 
-See also 'catTo', 'catToFIFOBS' -}
+This function is only available on POSIX platforms.
+
+See also 'catTo' -}
 catToFIFO :: FilePath -> Channel -> IO Channel
 catToFIFO fp ichan =
     do h <- fifoOpen fp
@@ -386,7 +388,9 @@ pwd = getCurrentDirectory
 #ifdef __HSH_POSIX__
 {- | Return the destination that the given symlink points to.
 
-An alias for System.Posix.Files.readSymbolicLink -}
+An alias for System.Posix.Files.readSymbolicLink
+
+This function is only available on POSIX platforms. -}
 readlink :: FilePath -> IO FilePath
 readlink fp =
     do issym <- (getFileStatus fp >>= return . isSymbolicLink)
@@ -394,7 +398,9 @@ readlink fp =
            then readSymbolicLink fp
            else return fp
 
-{- | As 'readlink', but turns the result into an absolute path. -}
+{- | As 'readlink', but turns the result into an absolute path.
+
+This function is only available on POSIX platforms. -}
 readlinkabs :: FilePath -> IO FilePath
 readlinkabs inp =
        do issym <- (getFileStatus inp >>= return . isSymbolicLink)
@@ -440,7 +446,9 @@ teeBS fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
 #ifdef __HSH_POSIX__
 {- | FIFO-safe version of 'teeBS'.
 
-This call will BLOCK all threads on open until a reader connects. -}
+This call will BLOCK all threads on open until a reader connects.
+
+This function is only available on POSIX platforms. -}
 teeFIFOBS :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
 teeFIFOBS fplist inp = teeBSGeneric fifoOpen fplist inp
 #endif
