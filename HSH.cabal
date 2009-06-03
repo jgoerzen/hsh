@@ -29,6 +29,8 @@ library
   Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
     hslogger, filepath, regex-base, regex-posix, directory,
     bytestring
+  if !os(windows)
+    Build-Depends: unix
   GHC-Options: -O2 -threaded -Wall
 
 Executable runtests
@@ -37,6 +39,8 @@ Executable runtests
     Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
       hslogger, filepath, regex-base, regex-posix, directory,
       bytestring, HUnit, testpack
+    if !os(windows)
+      Build-Depends: unix
   else
     Buildable: False
   Main-Is: runtests.hs

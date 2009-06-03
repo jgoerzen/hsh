@@ -20,6 +20,12 @@ HSH entirely as well.
 
 -}
 
+#if !(defined(mingw32_HOST_OS) || defined(mingw32_TARGET_OS) || defined(__MINGW32__))
+#define __HSH_POSIX__
+#else
+#define __HSH_WINDOWS__
+#endif
+
 module HSH.ShellEquivs(
                        abspath,
                        appendTo,
@@ -88,7 +94,7 @@ import System.Posix.User (getEffectiveUserName, getUserEntryForName, homeDirecto
 import System.Posix.Directory (createDirectory)
 import System.Posix.Types (FileMode())
 import System.Posix.IO
--- import System.Posix.Error
+import System.Posix.Error
 #endif
 
 import System.Path (absNormPath, bracketCWD)
