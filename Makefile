@@ -25,7 +25,8 @@ install: setup
 	./setup install
 
 clean:
-	./Setup.lhs clean
+	-./setup clean
+	-rm -f setup
 
 .PHONY: test
 test: test-ghc test-hugs

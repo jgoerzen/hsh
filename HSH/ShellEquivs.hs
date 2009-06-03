@@ -20,6 +20,9 @@ HSH entirely as well.
 
 -}
 
+module HSH.ShellEquivs() where
+{-
+
 module HSH.ShellEquivs(
                        abspath,
                        appendTo,
@@ -509,3 +512,4 @@ splitpath p
     | head p == '/' && length (filter (== '/') p) == 1 = ("/", tail p)
     | otherwise = (\(base, dir) -> (reverse (tail dir), reverse base))
         (break (== '/') (reverse p))
+-}

@@ -39,7 +39,7 @@ import System.IO.Error
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
-import Control.Exception(evaluate)
+import Control.Exception(evaluate, SomeException)
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)
@@ -71,7 +71,7 @@ chanAsBSL (ChanBSL s) = return s
 chanAsBSL (ChanHandle h) = BSL.hGetContents h
 
 chanAsBS :: Channel -> IO BS.ByteString
-chanAsBS c = do r <- ChanAsBSL c
+chanAsBS c = do r <- chanAsBSL c
                 let c = BSL.toChunks r
                 return . BS.concat $ c
 
@@ -92,7 +92,7 @@ instance Channelizable BSL.ByteString where
 instance Channelizable Handle where
     toChannel = ChanHandle
 instance Channelizable BS.ByteString where
-    toChannel bs = ChanBSL . fromChunks $ [bs]
+    toChannel bs = ChanBSL . BSL.fromChunks $ [bs]
 
 {- | Result type for shell commands.  The String is the text description of
 the command, not its output. -}
@@ -329,7 +329,7 @@ genericCommand cspec ichan =
           let ih = fromJust ih'
           let oh = fromJust oh'
           chanToHandle ichan ih
-          return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
+          return (ChanHandle oh, [(printCmdSpec cspec, waitForProcess ph)])
 
 printCmdSpec :: CmdSpec -> String
 printCmdSpec (ShellCommand s) = s
@@ -399,7 +399,7 @@ instance RunResult (IO ()) where
 
 instance RunResult (IO (String, ExitCode)) where
     run cmd =
-        do r <- fdInvoke cmd (ChanHandle stdInput)
+        do r <- fdInvoke cmd (ChanHandle stdin)
            processResults r
 
 instance RunResult (IO ExitCode) where
@@ -443,7 +443,7 @@ instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsBS cmd
 
 instance RunResult (IO (IO (String, ExitCode))) where
-    run cmd = do r <- fdInvoke cmd (ChanHandle stdInput)
+    run cmd = do r <- fdInvoke cmd (ChanHandle stdin)
                  return (processResults r)
 
 intermediateStringlikeResult :: ShellCommand b =>
@@ -451,7 +451,7 @@ intermediateStringlikeResult :: ShellCommand b =>
                              -> b
                              -> IO (a, IO (String, ExitCode))
 intermediateStringlikeResult chanfunc cmd =
-        do (ochan, r) <- fdInvoke cmd (ChanHandle stdInput)
+        do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
            c <- chanfunc ochan
            return (c, processResults r)
 
@@ -461,7 +461,7 @@ genericStringlikeResult :: ShellCommand b =>
                         -> b 
                         -> IO a
 genericStringlikeResult chanfunc evalfunc cmd =
-        do (c, r) <- intermediateStringlikeResult hgetcontentsfunc cmd
+        do (c, r) <- intermediateStringlikeResult chanfunc cmd
            evalfunc c
            --evaluate (length c)
            -- d "runS 6"
@@ -521,7 +521,7 @@ tryEC action =
               read (e =~ "[0-9]+$")
 
 {- | Catch an exception derived from a program exiting abnormally -}
-catchEC :: IO a -> (ProcessStatus -> IO a) -> IO a
+catchEC :: IO a -> (ExitCode -> IO a) -> IO a
 catchEC action handler =
     do r <- tryEC action
        case r of
@@ -561,14 +561,14 @@ runInThread :: String           -- ^ Description of this function
             -> (IO Channel)     -- ^ The action to run in the thread
             -> IO (Channel, [InvokeResult])
 runInThread descrip func =
-    do mvar <- (newEmptyMVar :: IO (MVar (Either ExitCode Channel))
+    do mvar <- (newEmptyMVar :: IO (MVar (Either ExitCode Channel)))
        forkIO (realThreadFunc mvar)
        return [(descrip, takeMVar mvar)]
     where realThreadFunc mvar = 
               catch (realfunc) (exchandler mvar)
           realfunc mvar = do r <- func
                              putMVar mvar (Right r)
-          exchandler mvar :: MVar (Either ExitCode Channel) -> SomeException -> IO ()
+          exchandler :: MVar (Either ExitCode Channel) -> SomeException -> IO ()
           exchandler mvar e = do em $ "runInThread/" ++ descrip ++ ": " ++ show em
                                  putMVar mvar (Left 1)
 
