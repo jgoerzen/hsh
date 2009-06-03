@@ -26,7 +26,6 @@ module HSH.ShellEquivs(
                        basename,
                        bracketCD,
                        catFrom,
-                       catFromBS,
                        catBytes,
                        catBytesFrom,
                        catTo,
@@ -140,8 +139,16 @@ will be forcing Haskell to buffer the input.
 Note: buffering behavior here is untested. 
 
 See also 'catFromBS', 'catBytes' . -}
-catFrom :: [FilePath] -> Channel -> IO String
-catFrom = genericCatFrom readFile chanAsString (++) "" 
+catFrom :: [FilePath] -> Channel -> IO Channel
+catFrom fplist ichan =
+    do r <- foldM foldfunc BSL.empty fplist
+       return (toChannel r)
+    where foldfunc accum fp =
+                  case fp of
+                    "-" -> do c <- chanAsBSL ichan
+                              return (BSL.append accum c)
+                    fn -> do c <- BSL.readFile fn
+                             return (BSL.append accum c)
 
 {- | Copy data in chunks from stdin to stdout, optionally with a fixed
 maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
@@ -189,24 +196,6 @@ catBytesFrom' chunksize hr count hignore hw =
           newCount newlen = case count of
                               Nothing -> Nothing
                               Just x -> Just (x - (fromIntegral newlen))
-
-{- | Lazy ByteString version of 'catFrom'.  This may have performance
-benefits. -}
-catFromBS :: [FilePath] -> Channel -> IO BSL.ByteString
-catFromBS = genericCatFrom BSL.readFile chanAsBSL BSL.append BSL.empty
-
-genericCatFrom :: (FilePath -> IO a)
-               -> (Channel -> IO a)
-               -> (a -> a -> a) -> a ->  [FilePath] -> Channel -> IO a
-genericCatFrom readfilefunc chanfunc appendfunc empty fplist ichan =
-    do r <- foldM foldfunc empty fplist
-       return r
-    where foldfunc accum fp =
-                  case fp of
-                    "-" -> do c <- chanfunc ichan
-                              return (appendfunc accum c)
-                    fn -> do c <- readfilefunc fn
-                             return (appendfunc accum c)
 
 {- | Takes input, writes it to the specified file, and does not pass it on.
      The return value is the empty string.  See also 'catToBS', 
