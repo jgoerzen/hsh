@@ -248,13 +248,11 @@ cut :: Integer -> Char -> String -> String
 cut pos = cutR [pos]
 
 {- | Read all input and produce no output.  Discards input completely. -}
-discard :: Handle -> Handle -> IO ()
-discard inh outh =
-    do eof <- hIsEOF inh
-       if eof
-          then return ()
-          else do BS.hGet inh 4096
-                  discard inh outh
+discard :: Channel -> IO Channel
+discard inh =
+    do c <- chanAsBSL inh
+       evaluate (BSL.length c)
+       return (ChanString "")
 
 {- | Split a list by a given character and select ranges of the resultant lists.
 
