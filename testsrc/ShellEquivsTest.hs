@@ -47,7 +47,8 @@ tcatFrom =
      cmdcase "-,foo" ("hi\n" ++ foo) $ "echo hi" -|- catFrom ["-", fn],
      cmdcase "foo,-" (foo ++ "hi\n") $ "echo hi" -|- catFrom [fn, "-"],
      cmdcase "foo,-,cat" "     1\t1234\n     2\t5678\n     3\t14\n     4\thi\n"
-             $ "echo hi" -|- catFrom [fn, "-"] -|- "cat -n"
+             $ "echo hi" -|- catFrom [fn, "-"] -|- "cat -n",
+     cmdcase "bytes" foo $ catFrom [fn] -|- catBytes 4096 Nothing
     ]
     where fn = "testsrc/testdata/foo"
           foo = "1234\n5678\n14\n"

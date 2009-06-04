@@ -136,14 +136,11 @@ bracketCD = bracketCWD
 {- | Load the specified files and display them, one at a time.
 
 The special file @-@ means to display the input.  If it is not given,
-no input is processed (though a small amount may be read into a buffer).
+no input is processed at all.
 
-Unlike the shell cat, @-@ may be given twice.  However, if it is, you
-will be forcing Haskell to buffer the input.
+@-@ may be given a maximum of one time.
 
-Note: buffering behavior here is untested. 
-
-See also 'catFromBS', 'catBytes' . -}
+See also 'catBytes' . -}
 catFrom :: [FilePath] -> Channel -> IO Channel
 catFrom fplist ichan =
     do r <- foldM foldfunc BSL.empty fplist
@@ -155,52 +152,37 @@ catFrom fplist ichan =
                     fn -> do c <- BSL.readFile fn
                              return (BSL.append accum c)
 
-{- | Copy data in chunks from stdin to stdout, optionally with a fixed
-maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
-to set the buffering of the input handle to blockbuffering in chunksize
-increments as well, but restores original buffering before returning.
+{- | Copy data from input to output, optionally with a fixed
+maximum size, in bytes.  Processes data using ByteStrings internally,
+so be aware of any possible UTF-8 conversions.
+
+You may wish to use @hSetBuffering h (BlockBuffering Nothing)@ prior to calling
+this function for optimal performance.
+
 See also 'catFrom', 'catBytesFrom' -}
-catBytes :: Int                -- ^ Preferred chunk size; data will be read in chunks of this size
-          -> (Maybe Integer)    -- ^ Maximum amount of data to transfer
-          -> Handle             -- ^ Handle for input
-          -> Handle             -- ^ Handle for output
-          -> IO ()
-catBytes chunksize count hr = catBytesFrom chunksize hr count hr
+catBytes :: (Maybe Integer)    -- ^ Maximum amount of data to transfer
+          -> Channel             -- ^ Handle for input
+          -> IO Channel
+catBytes count hr = catBytesFrom hr count hr
 
-{- | Generic version of 'catBytes'; reads data from specified Handle, and
-ignores stdin. -}
+{- | Generic version of 'catBytes'; reads data from specified Channel, and
+ignores stdin.
+-}
 
-catBytesFrom :: Int             -- ^ Preferred chunk size; data will be read in chunks of this size
-             -> Handle          -- ^ Handle to read from
-             -> (Maybe Integer) -- ^ Maximum amount of data to transfer
-             -> Handle          -- ^ Handle for input (ignored)
-             -> Handle          -- ^ Handle for output
-             -> IO ()
-catBytesFrom chunksize hr count hignore hw =
-    do buf <- hGetBuffering hr
-       catBytesFrom' chunksize hr count hignore hw
-       hSetBuffering hr buf
-
-catBytesFrom' _ _ (Just 0) _ _ = return ()
-catBytesFrom' chunksize hr count hignore hw =
-    do hSetBuffering hr (BlockBuffering (Just readamount))
-       case count of 
-         Just x -> if x < 1
-                      then do fail $ "catBytesFrom: count < 0 not supported"
-                      else return ()
-         _ -> return ()
-       r <- BS.hGet hr readamount
-       if BS.null r
-          then return ()        -- No more data to read
-          else do BS.hPutStr hw r
-                  catBytesFrom' chunksize hr (newCount (BS.length r)) hignore hw
-    where readamount = 
-              case count of
-                Just x -> fromIntegral $ min x (fromIntegral chunksize)
-                Nothing -> (fromIntegral chunksize)
-          newCount newlen = case count of
-                              Nothing -> Nothing
-                              Just x -> Just (x - (fromIntegral newlen))
+catBytesFrom :: Channel          -- ^ Handle to read from
+             -> (Maybe Integer)  -- ^ Maximum amount of data to transfer
+             -> Channel          -- ^ Handle for input (ignored)
+             -> IO Channel
+catBytesFrom (ChanHandle hr) count cignore =
+    case count of
+         Nothing -> return (ChanHandle hr)
+         Just m -> do c <- BSL.hGet hr (fromIntegral m)
+                      return (ChanBSL c)
+catBytesFrom cinput count cignore =
+    case count of
+      Nothing -> return cinput
+      Just m -> do r <- chanAsBSL cinput
+                   return (ChanBSL (BSL.take (fromIntegral m) r))
 
 {- | Takes input, writes it to the specified file, and does not pass it on.
      The return value is the empty string.  See also 'catToBS', 
