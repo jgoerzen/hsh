@@ -468,23 +468,28 @@ Takes a String representing a file or output and plugs it through lines and then
 uniq :: String -> String
 uniq = unlines . nub . lines
 
-{- | Double space a file -}
-space, unspace :: [String] -> [String]
+{- | Double space a file; add an empty line between each line. -}
+space :: [String] -> [String]
 space = intersperse ""
 
-{- | Inverse of double space; drop empty lines -}
+{- | Inverse of double 'space'; drop all empty lines. -}
+unspace :: [String] -> [String]
 unspace = filter (not . null)
 
-{- | Convert a string to all upper or lower case -}
-lower, upper :: String -> String
+{- | Convert a string to all lower case -}
+lower :: String -> String
 lower = map toLower
+
+{- | Convert a string to all upper case -}
+upper :: String -> String
 upper = map toUpper
 
-{- | Count number of lines.  wc -l -}
-wcL, wcW :: [String] -> [String]
+{- | Count number of lines.  Like wc -l -}
+wcL :: [String] -> [String]
 wcL inp = [show (genericLength inp :: Integer)]
 
 {- | Count number of words in a file (like wc -w) -}
+wcW :: [String] -> [String]
 wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
 
 {- Utility function.
