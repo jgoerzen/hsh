@@ -595,17 +595,28 @@ some variables:
 
 Now, let's set one:
 
-> Prelude HSH> runIO $ setenv ("TERM", "foo") $ "echo $TERM, $LANG"
+> Prelude HSH> runIO $ setenv [("TERM", "foo")] $ "echo $TERM, $LANG"
 > foo, en_US.UTF-8
 
 Or two:
 
-> Prelude HSH> runIO $ setenv ("TERM", "foo") $ setenv ("LANG", "de_DE.UTF-8") $ "echo $TERM, $LANG"
+> Prelude HSH> runIO $ setenv [("TERM", "foo")] $ setenv [("LANG", "de_DE.UTF-8")] $ "echo $TERM, $LANG"
 > foo, de_DE.UTF-8
 
 We could also do it easier, like this:
 
+> Prelude HSH> runIO $ setenv [("TERM", "foo"), ("LANG", "de_DE.UTF-8")] $ "echo $TERM, $LANG"
+> foo, de_DE.UTF-8
 
+It can be combined with unsetenv:
+
+> Prelude HSH> runIO $ setenv [("TERM", "foo")] $ unsetenv ["LANG"] $ "echo $TERM, $LANG"
+> foo,
+
+And used with pipes:
+
+> Prelude HSH> runIO $ setenv [("TERM", "foo")] $ "echo $TERM, $LANG" -|- "tr a-z A-Z"
+> FOO, EN_US.UTF-8
 
 See also 'unsetenv'.
 -}
@@ -618,8 +629,7 @@ setenv items cmd =
 
 {- | Removes an environment variable if it exists; does nothing otherwise.
 
-
-See also 'setenv'.
+See also 'setenv', which has a more extensive example.
 -}
 unsetenv :: (ShellCommand cmd) => [String] -> cmd -> EnvironCommand cmd
 unsetenv keys cmd =
