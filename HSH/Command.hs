@@ -587,6 +587,25 @@ instance (ShellCommand a) => ShellCommand (EnvironCommand a) where
 
 {- | Sets an environment variable, replacing an existing one if it exists.
 
+Here's a sample ghci session to illustrate.  First, let's see the defaults for
+some variables:
+
+> Prelude HSH> runIO $ "echo $TERM, $LANG"
+> xterm, en_US.UTF-8
+
+Now, let's set one:
+
+> Prelude HSH> runIO $ setenv ("TERM", "foo") $ "echo $TERM, $LANG"
+> foo, en_US.UTF-8
+
+Or two:
+
+> Prelude HSH> runIO $ setenv ("TERM", "foo") $ setenv ("LANG", "de_DE.UTF-8") $ "echo $TERM, $LANG"
+> foo, de_DE.UTF-8
+
+We could also do it easier, like this:
+
+
 
 See also 'unsetenv'.
 -}
