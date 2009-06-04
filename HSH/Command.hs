@@ -609,10 +609,11 @@ We could also do it easier, like this:
 
 See also 'unsetenv'.
 -}
-setenv :: (ShellCommand cmd) => (String, String) -> cmd -> EnvironCommand cmd
-setenv (key, val) cmd =
+setenv :: (ShellCommand cmd) => [(String, String)] -> cmd -> EnvironCommand cmd
+setenv items cmd =
     EnvironCommand efilter cmd
-    where efilter ienv = 
+    where efilter ienv = foldr efilter' ienv items
+          efilter' (key, val) ienv = 
               (key, val) : (filter (\(k, _) -> k /= key) ienv)
 
 {- | Removes an environment variable if it exists; does nothing otherwise.
@@ -620,7 +621,8 @@ setenv (key, val) cmd =
 
 See also 'setenv'.
 -}
-unsetenv :: (ShellCommand cmd) => String -> cmd -> EnvironCommand cmd
-unsetenv key cmd =
+unsetenv :: (ShellCommand cmd) => [String] -> cmd -> EnvironCommand cmd
+unsetenv keys cmd =
     EnvironCommand efilter cmd
-    where efilter = filter (\(k, _) -> k /= key)
+    where efilter ienv = foldr efilter' ienv keys
+          efilter' key = filter (\(k, _) -> k /= key)
