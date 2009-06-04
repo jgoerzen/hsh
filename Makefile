@@ -29,7 +29,7 @@ clean:
 	-rm -f setup
 
 .PHONY: test
-test: test-ghc test-hugs
+test: test-ghc # test-hugs
 	@echo ""
 	@echo "All tests pass."
 
