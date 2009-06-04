@@ -78,3 +78,4 @@ str2bsl = UTF8.fromString
 
 bsl2str :: BSL.ByteString -> String
 bsl2str = UTF8.toString
+

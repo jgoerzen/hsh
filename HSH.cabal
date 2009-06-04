@@ -26,7 +26,7 @@ library
   Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs, HSH.Channel
   Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances, FlexibleContexts, CPP
-  Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
+  Build-Depends: base >= 4, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
     hslogger, filepath, regex-base, regex-posix, directory,
     bytestring
   if !os(windows)
@@ -36,7 +36,8 @@ library
 Executable runtests
   if flag(buildtests)
     Buildable: True
-    Build-Depends: base, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
+    Build-Depends: base >= 4, utf8-string, process, mtl, regex-compat,
+      MissingH>=1.0.0,
       hslogger, filepath, regex-base, regex-posix, directory,
       bytestring, HUnit, testpack
     if !os(windows)
