@@ -1,8 +1,16 @@
-haskell-hsh (1.2.6.4) unstable; urgency=high
+haskell-hsh (2.0.0-1) unstable; urgency=low
 
+  * New upstream release:
+    + Core completely re-implemented in terms of System.Process instead
+      of the POSIX-specific routines.  Significant reduction in
+      code size and complexity.  Better compatibility.
+    + Simplify and rework several ShellEquivs functions.
+    + Eliminate ShellEquivs functions no longer needed: teeBS, teeFIFOBS, 
+      catToBS, catToFIFOBS, catFromBS.
+    + Drop (>|-) operator -- no longer useful
   * Rebuild with newer GHC.
 
- -- John Goerzen <jgoerzen@complete.org>  Mon, 19 Jan 2009 15:58:13 -0600
+ -- John Goerzen <jgoerzen@complete.org>  Wed, 03 Jun 2009 21:28:05 -0500
 
 haskell-hsh (1.2.6.3) unstable; urgency=low
 
