@@ -17,7 +17,8 @@ Please see the COPYRIGHT file
 Copyright (c) 2006-2009 John Goerzen, jgoerzen\@complete.org
 -}
 
-module HSH.Command (ShellCommand(..),
+module HSH.Command (Environment,
+                    ShellCommand(..),
                     PipeCommand(..),
                     (-|-),
                     RunResult,
@@ -60,6 +61,9 @@ em = errorM "HSH.Command"
 the command, not its output. -}
 type InvokeResult = (String, IO ExitCode)
 
+{- | Type for the environment. -}
+type Environment = Maybe [(String, String)]
+
 {- | A shell command is something we can invoke, pipe to, pipe from,
 or pipe in both directions.  All commands that can be run as shell
 commands must define these methods.
@@ -100,6 +104,7 @@ Some pre-defined instance functions include:
 class (Show a) => ShellCommand a where
     {- | Invoke a command. -}
     fdInvoke :: a               -- ^ The command
+             -> Environment     -- ^ The environment
              -> Channel         -- ^ Where to read input from
              -> IO (Channel, [InvokeResult]) -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
@@ -192,7 +197,7 @@ instance ShellCommand (() -> BS.ByteString) where
                   iofunc = return . func
 
 instance ShellCommand (Channel -> IO Channel) where
-    fdInvoke func cstdin =
+    fdInvoke func _ cstdin =
         runInHandler (show func) (func cstdin)
 
 {-
@@ -204,9 +209,10 @@ instance ShellCommand (Handle -> Handle -> IO ()) where
 genericStringlikeIO :: (Show (a -> IO a), Channelizable a) =>
                        (Channel -> IO a)
                     -> (a -> IO a)
+                    -> Environment
                     -> Channel
                     -> IO (Channel, [InvokeResult])
-genericStringlikeIO dechanfunc userfunc cstdin =
+genericStringlikeIO dechanfunc userfunc _ cstdin =
     do contents <- dechanfunc cstdin
        runInHandler (show userfunc) (realfunc contents)
     where realfunc contents = do r <- userfunc contents
@@ -214,9 +220,10 @@ genericStringlikeIO dechanfunc userfunc cstdin =
 
 genericStringlikeO :: (Show (() -> IO a), Channelizable a) =>
                       (() -> IO a)
+                   -> Environment
                    -> Channel
                    -> IO (Channel, [InvokeResult])
-genericStringlikeO userfunc _ =
+genericStringlikeO userfunc _ _ =
     runInHandler (show userfunc) realfunc
         where realfunc :: IO Channel
               realfunc = do r <- userfunc ()
@@ -271,14 +278,15 @@ instance ShellCommand String where
 
 {- | How to we handle and external command. -}
 genericCommand :: CmdSpec 
+               -> Environment
                -> Channel
                -> IO (Channel, [InvokeResult])
 
 -- Handling external command when stdin channel is a Handle
-genericCommand c (ChanHandle ih) =
+genericCommand c environ (ChanHandle ih) =
     let cp = CreateProcess {cmdspec = c,
                             cwd = Nothing,
-                            env = Nothing,
+                            env = environ,
                             std_in = UseHandle ih,
                             std_out = CreatePipe,
                             std_err = Inherit,
@@ -286,10 +294,10 @@ genericCommand c (ChanHandle ih) =
     in do (_, oh', _, ph) <- createProcess cp
           let oh = fromJust oh'
           return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
-genericCommand cspec ichan = 
+genericCommand cspec environ ichan = 
     let cp = CreateProcess {cmdspec = cspec,
                             cwd = Nothing,
-                            env = Nothing,
+                            env = environ,
                             std_in = CreatePipe,
                             std_out = CreatePipe,
                             std_err = Inherit,
@@ -313,9 +321,9 @@ data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
-    fdInvoke (PipeCommand cmd1 cmd2) ichan =
-        do (chan1, res1) <- fdInvoke cmd1 ichan
-           (chan2, res2) <- fdInvoke cmd2 chan1
+    fdInvoke (PipeCommand cmd1 cmd2) env ichan =
+        do (chan1, res1) <- fdInvoke cmd1 env ichan
+           (chan2, res2) <- fdInvoke cmd2 env chan1
            return (chan2, res1 ++ res2)
 
 {- | Pipe the output of the first command into the input of the second. -}
@@ -368,7 +376,7 @@ instance RunResult (IO ()) where
 
 instance RunResult (IO (String, ExitCode)) where
     run cmd =
-        do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+        do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
            chanToHandle ochan stdout
            processResults r
 
@@ -413,7 +421,7 @@ instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsBS cmd
 
 instance RunResult (IO (IO (String, ExitCode))) where
-    run cmd = do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+    run cmd = do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
                  chanToHandle ochan stdout
                  return (processResults r)
 
@@ -422,7 +430,7 @@ intermediateStringlikeResult :: ShellCommand b =>
                              -> b
                              -> IO (a, IO (String, ExitCode))
 intermediateStringlikeResult chanfunc cmd =
-        do (ochan, r) <- fdInvoke cmd (ChanHandle stdin)
+        do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
            c <- chanfunc ochan
            return (c, processResults r)
 
