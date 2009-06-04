@@ -84,6 +84,7 @@ import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
+import Control.Exception(evaluate)
 -- import System.FilePath (splitPath)
 
 #ifdef __HSH_POSIX__
@@ -413,27 +414,30 @@ tac :: [String] -> [String]
 tac = reverse
 
 {- | Takes input, writes it to all the specified files, and passes it on.
-This function does /NOT' buffer input.
+This function does /NOT/ buffer input.
 
 See also 'catFrom'. -}
-tee :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+tee :: [FilePath] -> Channel -> IO Channel
 tee fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
 
 #ifdef __HSH_POSIX__
-{- | FIFO-safe version of 'teeBS'.
+{- | FIFO-safe version of 'tee'.
 
 This call will BLOCK all threads on open until a reader connects.
 
 This function is only available on POSIX platforms. -}
-teeFIFO :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+teeFIFO :: [FilePath] -> Channel -> IO Channel
 teeFIFO fplist inp = teeBSGeneric fifoOpen fplist inp
 #endif
 
-teeBSGeneric :: (FilePath -> IO Handle) -> [FilePath] -> BSL.ByteString -> IO BSL.ByteString
-teeBSGeneric openfunc fplist inp =
+teeBSGeneric :: (FilePath -> IO Handle) 
+             -> [FilePath] 
+             -> Channel -> IO Channel
+teeBSGeneric openfunc fplist ichan =
     do handles <- mapM openfunc fplist
+       inp <- chanAsBSL ichan
        resultChunks <- hProcChunks handles (BSL.toChunks inp)
-       return (BSL.fromChunks resultChunks)
+       return (ChanBSL $ BSL.fromChunks resultChunks)
     where hProcChunks :: [Handle] -> [BS.ByteString] -> IO [BS.ByteString]
           hProcChunks handles chunks = unsafeInterleaveIO $
               case chunks of
