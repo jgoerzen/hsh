@@ -29,6 +29,8 @@ module HSH.Command (Environment,
                     checkResults,
                     tryEC,
                     catchEC,
+                    setenv,
+                    unsetenv
                    ) where
 
 -- import System.IO.HVIO
@@ -47,6 +49,7 @@ import Control.Monad(when)
 import Data.String.Utils(rstrip)
 import Control.Concurrent
 import System.Process
+import System.Environment(getEnvironment)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
@@ -553,3 +556,52 @@ runInHandler descrip func =
           exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show e
                             return (ChanString "", [(descrip, return (ExitFailure 1))])
 
+
+------------------------------------------------------------
+-- Environment
+------------------------------------------------------------
+{- | An environment variable filter function.
+
+This is a low-level interface; see 'setenv' and 'unsetenv' for more convenient
+interfaces. -}
+type EnvironFilter = [(String, String)] -> [(String, String)]
+
+instance Show EnvironFilter where
+    show _ = "EnvironFilter"
+
+
+{- | A command that carries environment variable information with it.
+
+This is a low-level interface; see 'setenv' and 'unsetenv' for more
+convenient interfaces. -}
+data (ShellCommand a) => EnvironCommand a = EnvironCommand EnvironFilter a
+     deriving Show
+
+instance (ShellCommand a) => ShellCommand (EnvironCommand a) where
+    fdInvoke (EnvironCommand efilter cmd) Nothing ichan =
+        do -- No incoming environment; initialize from system default.
+           e <- getEnvironment
+           fdInvoke cmd (Just (efilter e)) ichan
+    fdInvoke (EnvironCommand efilter cmd) (Just ienv) ichan =
+        fdInvoke cmd (Just (efilter ienv)) ichan
+
+{- | Sets an environment variable, replacing an existing one if it exists.
+
+
+See also 'unsetenv'.
+-}
+setenv :: (ShellCommand cmd) => (String, String) -> cmd -> EnvironCommand cmd
+setenv (key, val) cmd =
+    EnvironCommand efilter cmd
+    where efilter ienv = 
+              (key, val) : (filter (\(k, _) -> k /= key) ienv)
+
+{- | Removes an environment variable if it exists; does nothing otherwise.
+
+
+See also 'setenv'.
+-}
+unsetenv :: (ShellCommand cmd) => String -> cmd -> EnvironCommand cmd
+unsetenv key cmd =
+    EnvironCommand efilter cmd
+    where efilter = filter (\(k, _) -> k /= key)

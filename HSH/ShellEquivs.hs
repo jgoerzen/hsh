@@ -62,6 +62,7 @@ module HSH.ShellEquivs(
 #endif
                        rev,
                        revW,
+                       HSH.Command.setenv,
                        space,
                        unspace,
                        tac,
@@ -73,6 +74,7 @@ module HSH.ShellEquivs(
                        trd,
                        wcW,
                        wcL,
+                       HSH.Command.unsetenv,
                        uniq,
                       ) where
 
@@ -103,6 +105,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import System.IO.Unsafe(unsafeInterleaveIO)
 import HSH.Channel
+import HSH.Command(setenv, unsetenv)
 
 {- | Return the absolute path of the arg.  Raises an error if the
 computation is impossible. -}
