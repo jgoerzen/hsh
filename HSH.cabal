@@ -5,6 +5,7 @@ Maintainer: John Goerzen <jgoerzen@complete.org>
 Author: John Goerzen
 Stability: Beta
 Copyright: Copyright (c) 2006-2009 John Goerzen
+Category: system
 license-file: COPYRIGHT
 extra-source-files: COPYING
 homepage: http://software.complete.org/hsh
@@ -26,7 +27,7 @@ library
   Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs, HSH.Channel
   Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances, FlexibleContexts, CPP
-  Build-Depends: base >= 4, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
+  Build-Depends: base >= 4 && < 5, utf8-string, process, mtl, regex-compat, MissingH>=1.0.0,
     hslogger, filepath, regex-base, regex-posix, directory,
     bytestring
   if !os(windows)
@@ -36,7 +37,7 @@ library
 Executable runtests
   if flag(buildtests)
     Buildable: True
-    Build-Depends: base >= 4, utf8-string, process, mtl, regex-compat,
+    Build-Depends: base >= 4 && < 5, utf8-string, process, mtl, regex-compat,
       MissingH>=1.0.0,
       hslogger, filepath, regex-base, regex-posix, directory,
       bytestring, HUnit, testpack
