@@ -82,7 +82,7 @@ binary-arch: build install
 	dh_testdir
 	dh_testroot
 	dh_installchangelogs -a
-	dh_installdocs -a dist/doc/html
+	dh_installdocs -a
 	dh_installexamples -a
 #	dh_install
 #	dh_installmenu
