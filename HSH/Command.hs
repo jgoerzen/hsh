@@ -52,7 +52,6 @@ import System.Process
 import System.Environment(getEnvironment)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy.UTF8 as UTF8
 import HSH.Channel
 
 d, dr :: String -> IO ()
