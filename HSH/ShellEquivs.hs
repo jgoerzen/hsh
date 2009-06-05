@@ -84,6 +84,7 @@ import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
+import Control.Exception(evaluate)
 -- import System.FilePath (splitPath)
 
 #ifdef __HSH_POSIX__
@@ -136,14 +137,11 @@ bracketCD = bracketCWD
 {- | Load the specified files and display them, one at a time.
 
 The special file @-@ means to display the input.  If it is not given,
-no input is processed (though a small amount may be read into a buffer).
+no input is processed at all.
 
-Unlike the shell cat, @-@ may be given twice.  However, if it is, you
-will be forcing Haskell to buffer the input.
+@-@ may be given a maximum of one time.
 
-Note: buffering behavior here is untested. 
-
-See also 'catFromBS', 'catBytes' . -}
+See also 'catBytes' . -}
 catFrom :: [FilePath] -> Channel -> IO Channel
 catFrom fplist ichan =
     do r <- foldM foldfunc BSL.empty fplist
@@ -155,52 +153,37 @@ catFrom fplist ichan =
                     fn -> do c <- BSL.readFile fn
                              return (BSL.append accum c)
 
-{- | Copy data in chunks from stdin to stdout, optionally with a fixed
-maximum size.   Uses strict ByteStrings internally.  Uses hSetBuffering
-to set the buffering of the input handle to blockbuffering in chunksize
-increments as well, but restores original buffering before returning.
+{- | Copy data from input to output, optionally with a fixed
+maximum size, in bytes.  Processes data using ByteStrings internally,
+so be aware of any possible UTF-8 conversions.
+
+You may wish to use @hSetBuffering h (BlockBuffering Nothing)@ prior to calling
+this function for optimal performance.
+
 See also 'catFrom', 'catBytesFrom' -}
-catBytes :: Int                -- ^ Preferred chunk size; data will be read in chunks of this size
-          -> (Maybe Integer)    -- ^ Maximum amount of data to transfer
-          -> Handle             -- ^ Handle for input
-          -> Handle             -- ^ Handle for output
-          -> IO ()
-catBytes chunksize count hr = catBytesFrom chunksize hr count hr
+catBytes :: (Maybe Integer)    -- ^ Maximum amount of data to transfer
+          -> Channel             -- ^ Handle for input
+          -> IO Channel
+catBytes count hr = catBytesFrom hr count hr
 
-{- | Generic version of 'catBytes'; reads data from specified Handle, and
-ignores stdin. -}
+{- | Generic version of 'catBytes'; reads data from specified Channel, and
+ignores stdin.
+-}
 
-catBytesFrom :: Int             -- ^ Preferred chunk size; data will be read in chunks of this size
-             -> Handle          -- ^ Handle to read from
-             -> (Maybe Integer) -- ^ Maximum amount of data to transfer
-             -> Handle          -- ^ Handle for input (ignored)
-             -> Handle          -- ^ Handle for output
-             -> IO ()
-catBytesFrom chunksize hr count hignore hw =
-    do buf <- hGetBuffering hr
-       catBytesFrom' chunksize hr count hignore hw
-       hSetBuffering hr buf
-
-catBytesFrom' _ _ (Just 0) _ _ = return ()
-catBytesFrom' chunksize hr count hignore hw =
-    do hSetBuffering hr (BlockBuffering (Just readamount))
-       case count of 
-         Just x -> if x < 1
-                      then do fail $ "catBytesFrom: count < 0 not supported"
-                      else return ()
-         _ -> return ()
-       r <- BS.hGet hr readamount
-       if BS.null r
-          then return ()        -- No more data to read
-          else do BS.hPutStr hw r
-                  catBytesFrom' chunksize hr (newCount (BS.length r)) hignore hw
-    where readamount = 
-              case count of
-                Just x -> fromIntegral $ min x (fromIntegral chunksize)
-                Nothing -> (fromIntegral chunksize)
-          newCount newlen = case count of
-                              Nothing -> Nothing
-                              Just x -> Just (x - (fromIntegral newlen))
+catBytesFrom :: Channel          -- ^ Handle to read from
+             -> (Maybe Integer)  -- ^ Maximum amount of data to transfer
+             -> Channel          -- ^ Handle for input (ignored)
+             -> IO Channel
+catBytesFrom (ChanHandle hr) count cignore =
+    case count of
+         Nothing -> return (ChanHandle hr)
+         Just m -> do c <- BSL.hGet hr (fromIntegral m)
+                      return (ChanBSL c)
+catBytesFrom cinput count cignore =
+    case count of
+      Nothing -> return cinput
+      Just m -> do r <- chanAsBSL cinput
+                   return (ChanBSL (BSL.take (fromIntegral m) r))
 
 {- | Takes input, writes it to the specified file, and does not pass it on.
      The return value is the empty string.  See also 'catToBS', 
@@ -266,13 +249,11 @@ cut :: Integer -> Char -> String -> String
 cut pos = cutR [pos]
 
 {- | Read all input and produce no output.  Discards input completely. -}
-discard :: Handle -> Handle -> IO ()
-discard inh outh =
-    do eof <- hIsEOF inh
-       if eof
-          then return ()
-          else do BS.hGet inh 4096
-                  discard inh outh
+discard :: Channel -> IO Channel
+discard inh =
+    do c <- chanAsBSL inh
+       evaluate (BSL.length c)
+       return (ChanString "")
 
 {- | Split a list by a given character and select ranges of the resultant lists.
 
@@ -433,27 +414,30 @@ tac :: [String] -> [String]
 tac = reverse
 
 {- | Takes input, writes it to all the specified files, and passes it on.
-This function does /NOT' buffer input.
+This function does /NOT/ buffer input.
 
 See also 'catFrom'. -}
-tee :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+tee :: [FilePath] -> Channel -> IO Channel
 tee fplist inp = teeBSGeneric (\fp -> openFile fp WriteMode) fplist inp
 
 #ifdef __HSH_POSIX__
-{- | FIFO-safe version of 'teeBS'.
+{- | FIFO-safe version of 'tee'.
 
 This call will BLOCK all threads on open until a reader connects.
 
 This function is only available on POSIX platforms. -}
-teeFIFO :: [FilePath] -> BSL.ByteString -> IO BSL.ByteString
+teeFIFO :: [FilePath] -> Channel -> IO Channel
 teeFIFO fplist inp = teeBSGeneric fifoOpen fplist inp
 #endif
 
-teeBSGeneric :: (FilePath -> IO Handle) -> [FilePath] -> BSL.ByteString -> IO BSL.ByteString
-teeBSGeneric openfunc fplist inp =
+teeBSGeneric :: (FilePath -> IO Handle) 
+             -> [FilePath] 
+             -> Channel -> IO Channel
+teeBSGeneric openfunc fplist ichan =
     do handles <- mapM openfunc fplist
+       inp <- chanAsBSL ichan
        resultChunks <- hProcChunks handles (BSL.toChunks inp)
-       return (BSL.fromChunks resultChunks)
+       return (ChanBSL $ BSL.fromChunks resultChunks)
     where hProcChunks :: [Handle] -> [BS.ByteString] -> IO [BS.ByteString]
           hProcChunks handles chunks = unsafeInterleaveIO $
               case chunks of
@@ -484,23 +468,28 @@ Takes a String representing a file or output and plugs it through lines and then
 uniq :: String -> String
 uniq = unlines . nub . lines
 
-{- | Double space a file -}
-space, unspace :: [String] -> [String]
+{- | Double space a file; add an empty line between each line. -}
+space :: [String] -> [String]
 space = intersperse ""
 
-{- | Inverse of double space; drop empty lines -}
+{- | Inverse of double 'space'; drop all empty lines. -}
+unspace :: [String] -> [String]
 unspace = filter (not . null)
 
-{- | Convert a string to all upper or lower case -}
-lower, upper :: String -> String
+{- | Convert a string to all lower case -}
+lower :: String -> String
 lower = map toLower
+
+{- | Convert a string to all upper case -}
+upper :: String -> String
 upper = map toUpper
 
-{- | Count number of lines.  wc -l -}
-wcL, wcW :: [String] -> [String]
+{- | Count number of lines.  Like wc -l -}
+wcL :: [String] -> [String]
 wcL inp = [show (genericLength inp :: Integer)]
 
 {- | Count number of words in a file (like wc -w) -}
+wcW :: [String] -> [String]
 wcW inp = [show ((genericLength $ words $ unlines inp) :: Integer)]
 
 {- Utility function.

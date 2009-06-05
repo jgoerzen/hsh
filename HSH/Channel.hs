@@ -28,6 +28,7 @@ module HSH.Channel (Channel(..),
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
+import qualified System.IO.UTF8 as IOUTF8
 import System.IO
 import Control.Concurrent
 
@@ -40,7 +41,7 @@ data Channel = ChanString String
 chanAsString :: Channel -> IO String
 chanAsString (ChanString s) = return s
 chanAsString (ChanBSL s) = return . bsl2str $ s
-chanAsString (ChanHandle h) = hGetContents h
+chanAsString (ChanHandle h) = IOUTF8.hGetContents h
 
 chanAsBSL :: Channel -> IO BSL.ByteString
 chanAsBSL (ChanString s) = return . str2bsl $ s
@@ -54,7 +55,7 @@ chanAsBS c = do r <- chanAsBSL c
 
 {- | Writes the Channel to the given Handle. -}
 chanToHandle :: Channel -> Handle -> IO ()
-chanToHandle (ChanString s) h = hPutStr h s
+chanToHandle (ChanString s) h = IOUTF8.hPutStr h s
 chanToHandle (ChanBSL s) h = BSL.hPut h s
 chanToHandle (ChanHandle srchdl) desthdl = forkIO copier >> return ()
     where copier = do c <- BSL.hGetContents srchdl
