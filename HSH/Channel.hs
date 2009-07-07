@@ -52,13 +52,16 @@ chanAsBS c = do r <- chanAsBSL c
                 let contents = BSL.toChunks r
                 return . BS.concat $ contents
 
-{- | Writes the Channel to the given Handle. -}
-chanToHandle :: Channel -> Handle -> IO ()
-chanToHandle (ChanString s) h = hPutStr h s
-chanToHandle (ChanBSL s) h = BSL.hPut h s
-chanToHandle (ChanHandle srchdl) desthdl = forkIO copier >> return ()
-    where copier = do c <- BSL.hGetContents srchdl
-                      BSL.hPut desthdl c
+{- | Writes the Channel to the given Handle. If the first parameter is True,
+     do this in a separate thread and close the handle afterwards.
+-}
+chanToHandle :: Bool -> Channel -> Handle -> IO ()
+chanToHandle close c h = if close then forkIO (dumpChanToHandle c h >> hClose h) >> return ()
+                                  else dumpChanToHandle c h
+   where dumpChanToHandle (ChanString s) h = hPutStr h s
+         dumpChanToHandle (ChanBSL s) h = BSL.hPut h s
+         dumpChanToHandle (ChanHandle srchdl) desthdl
+              = BSL.hGetContents srchdl >>= BSL.hPut desthdl
 
 class Channelizable a where
     toChannel :: a -> Channel

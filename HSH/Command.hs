@@ -307,7 +307,7 @@ genericCommand cspec environ ichan =
     in do (ih', oh', _, ph) <- createProcess cp
           let ih = fromJust ih'
           let oh = fromJust oh'
-          chanToHandle ichan ih
+          chanToHandle True ichan ih
           return (ChanHandle oh, [(printCmdSpec cspec, waitForProcess ph)])
 
 printCmdSpec :: CmdSpec -> String
@@ -379,7 +379,7 @@ instance RunResult (IO ()) where
 instance RunResult (IO (String, ExitCode)) where
     run cmd =
         do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
-           chanToHandle ochan stdout
+           chanToHandle False ochan stdout
            processResults r
 
 instance RunResult (IO ExitCode) where
@@ -424,7 +424,7 @@ instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
 
 instance RunResult (IO (IO (String, ExitCode))) where
     run cmd = do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
-                 chanToHandle ochan stdout
+                 chanToHandle False ochan stdout
                  return (processResults r)
 
 intermediateStringlikeResult :: ShellCommand b =>

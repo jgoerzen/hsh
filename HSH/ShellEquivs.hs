@@ -191,8 +191,7 @@ catBytesFrom cinput count cignore =
 catTo :: FilePath -> Channel -> IO Channel
 catTo fp ichan =
     do ofile <- openFile fp WriteMode
-       chanToHandle ichan ofile
-       hClose ofile
+       chanToHandle True ichan ofile
        return (ChanString "")
 
 #ifdef __HSH_POSIX__
@@ -212,8 +211,7 @@ See also 'catTo' -}
 catToFIFO :: FilePath -> Channel -> IO Channel
 catToFIFO fp ichan =
     do h <- fifoOpen fp
-       chanToHandle ichan h
-       hClose h
+       chanToHandle True ichan h
        return (ChanString "")
 
 fifoOpen :: FilePath -> IO Handle
