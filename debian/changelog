@@ -1,0 +1,111 @@
+haskell-hsh (2.0.0-1) unstable; urgency=low
+
+  * New upstream release:
+    + Core completely re-implemented in terms of System.Process instead
+      of the POSIX-specific routines.  Significant reduction in
+      code size and complexity.  Better compatibility.
+    + Simplify and rework several ShellEquivs functions.
+    + Eliminate ShellEquivs functions no longer needed: teeBS, teeFIFOBS, 
+      catToBS, catToFIFOBS, catFromBS.
+    + Drop (>|-) operator -- no longer useful
+  * Rebuild with newer GHC.
+
+ -- John Goerzen <jgoerzen@complete.org>  Wed, 03 Jun 2009 21:28:05 -0500
+
+haskell-hsh (1.2.6.3) unstable; urgency=low
+
+  * Rebuild with newer libs.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 11 Dec 2008 09:15:40 -0600
+
+haskell-hsh (1.2.6.2) unstable; urgency=low
+
+  * Rebuild with newer MissingH and hslogger.  Closes: #429708.
+  * Use dh_haskell_depends in debian/rules to permanently help fix this problem.
+
+ -- John Goerzen <jgoerzen@complete.org>  Fri, 05 Dec 2008 14:13:58 -0600
+
+haskell-hsh (1.2.6.1) unstable; urgency=low
+
+  * Rebuild with newer MissingH.
+
+ -- John Goerzen <jgoerzen@complete.org>  Wed, 23 Apr 2008 02:57:01 -0500
+
+haskell-hsh (1.2.6.0) unstable; urgency=low
+
+  * Now support ByteString for many operations.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 10 Apr 2008 17:47:34 -0500
+
+haskell-hsh (1.2.5.2) unstable; urgency=low
+
+  * Rebuild against newer hslogger.  Closes: #468961.
+
+ -- John Goerzen <jgoerzen@complete.org>  Sun, 02 Mar 2008 11:29:56 -0600
+
+haskell-hsh (1.2.5.1) unstable; urgency=low
+
+  * Rebuild wiht newer regexp.
+
+ -- John Goerzen <jgoerzen@complete.org>  Fri, 15 Feb 2008 06:43:18 -0600
+
+haskell-hsh (1.2.5.0) unstable; urgency=low
+
+  * Updates for GHC 6.8 and 6.8 libs.   
+
+ -- John Goerzen <jgoerzen@complete.org>  Fri, 11 Jan 2008 03:59:19 -0600
+
+haskell-hsh (1.2.4) unstable; urgency=low
+
+  * Rebuild for newer libs.  Closes: #429708, #432448, #430016.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 12 Jul 2007 03:21:30 -0500
+
+haskell-hsh (1.2.3) unstable; urgency=low
+
+  * Rebuild with newer GHC.
+
+ -- John Goerzen <jgoerzen@complete.org>  Wed, 06 Jun 2007 06:52:20 -0500
+
+haskell-hsh (1.2.2) unstable; urgency=low
+
+  * Rebuild for newer MissingH.  Closes: #421452.
+  * Rebuild for newer FilePath.  Closes: #419194.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu, 03 May 2007 19:57:14 -0500
+
+haskell-hsh (1.2.1) unstable; urgency=low
+
+  * Rebuild for newer MissingH.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu,  8 Mar 2007 14:31:13 -0600
+
+haskell-hsh (1.2.0) unstable; urgency=low
+
+  * Renamed catFromS to echo.
+  * New commands mkdir, glob, bracketCD
+
+ -- John Goerzen <jgoerzen@complete.org>  Sat,  3 Mar 2007 08:20:48 -0600
+
+haskell-hsh (1.1.0) unstable; urgency=low
+
+  * Bumping version number (should have in 1.0.1 due to API change)
+  * New ShellEquivs commands: appendTo, exit
+  * New Commands helpers: runIO, runSL
+  * Fixes to readlink, readlinkabs
+
+ -- John Goerzen <jgoerzen@complete.org>  Sat,  3 Mar 2007 08:06:20 -0600
+
+haskell-hsh (1.0.1) unstable; urgency=low
+
+  * New class to handle the different ways of invoking run.
+  * Many new ways to get results back.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu,  1 Mar 2007 17:41:00 -0600
+
+haskell-hsh (1.0.0) unstable; urgency=low
+
+  * Initial release.  Closes: #413017.
+
+ -- John Goerzen <jgoerzen@complete.org>  Thu,  1 Mar 2007 03:00:56 -0600
+
