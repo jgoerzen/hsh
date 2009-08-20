@@ -6,8 +6,8 @@ Build-Depends: debhelper (>= 4.0.0), ghc6 (>= 6.8.2dfsg1), haskell-devscripts (>
 Standards-Version: 3.6.2
 Section: libs
 Homepage: http://software.complete.org/hsh
-Vcs-Git: git://git.complete.org/hsh
-Vcs-Browser: http://git.complete.org/hsh
+Vcs-Git: git://git.debian.org/git/pkg-haskell/haskell-hsh.git
+Vcs-Browser: http://git.debian.org/?p=pkg-haskell/haskell-hsh.git;a=summary
 
 Package: libghc6-hsh-dev
 Section: libdevel
