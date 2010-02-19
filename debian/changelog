@@ -1,5 +1,6 @@
-haskell-hsh (2.0.3-1+nmu1) UNRELEASED; urgency=low
+haskell-hsh (2.0.3-2) unstable; urgency=low
 
+  [ Erik de Castro Lopo ]
   * NMU upload ok-ed by regular maintainer.
   * debian/rules
     - Convert to hlibrary.mk (dh_haskell was removed to haskell-devscripts).
@@ -12,7 +13,10 @@ haskell-hsh (2.0.3-1+nmu1) UNRELEASED; urgency=low
    * debian/compat
     - Version 5
 
- -- Erik de Castro Lopo <erikd@mega-nerd.com>  Mon, 23 Nov 2009 20:47:09 +1100
+  [ John Goerzen ]
+  * Rebuild with GHC 6.12.
+
+ -- John Goerzen <jgoerzen@complete.org>  Fri, 19 Feb 2010 10:26:33 -0600
 
 haskell-hsh (2.0.3-1) unstable; urgency=low
 
