@@ -94,9 +94,15 @@ errortests =
                            assertRaises "run"  (userError exp)
                                         ((run cmd)::IO ())
        
+utf8tests = 
+  let teststr = "привет" in
+  [cmdcase "basic utf8" teststr ("echo " ++ teststr)
+  ]
+
 tests = TestList
         [TestLabel "basics" $ TestList basics,
          TestLabel "pipes" $ TestList pipes,
          TestLabel "errors" $ TestList errortests,
-         TestLabel "sleep" $ TestList sleeptests]
+         TestLabel "sleep" $ TestList sleeptests,
+         TestLabel "utf8" $ TestList utf8tests]
 
