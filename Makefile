@@ -31,7 +31,6 @@ clean:
 .PHONY: test
 test: test-ghc # test-hugs
 	@echo ""
-	@echo "All tests pass."
 
 test-hugs: setup
 	@echo " ****** Running hugs tests"
