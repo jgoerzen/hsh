@@ -293,7 +293,7 @@ genericCommand c environ (ChanHandle ih) =
                             std_out = CreatePipe,
                             std_err = Inherit,
                             close_fds = True
-#ifdef PROCESS_LIB_1_1
+#if MIN_VERSION_process(1,1,0)
 -- Or use GHC version as a proxy:  __GLASGOW_HASKELL__ >= 720
 			    -- Added field in process 1.1.0.0:
 			    , create_group = False
@@ -310,7 +310,7 @@ genericCommand cspec environ ichan =
                             std_out = CreatePipe,
                             std_err = Inherit,
                             close_fds = True
-#ifdef PROCESS_LIB_1_1
+#if MIN_VERSION_process(1,1,0)
 			    -- Added field in process 1.1.0.0:
 			    , create_group = False
 #endif
