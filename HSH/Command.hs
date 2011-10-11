@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances #-}
+{-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances -XStandaloneDeriving #-}
 
 {- Commands for HSH
 Copyright (C) 2004-2008 John Goerzen <jgoerzen@complete.org>
@@ -292,7 +292,13 @@ genericCommand c environ (ChanHandle ih) =
                             std_in = UseHandle ih,
                             std_out = CreatePipe,
                             std_err = Inherit,
-                            close_fds = True}
+                            close_fds = True
+#if MIN_VERSION_process(1,1,0)
+-- Or use GHC version as a proxy:  __GLASGOW_HASKELL__ >= 720
+			    -- Added field in process 1.1.0.0:
+			    , create_group = False
+#endif
+			   }
     in do (_, oh', _, ph) <- createProcess cp
           let oh = fromJust oh'
           return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
@@ -303,7 +309,12 @@ genericCommand cspec environ ichan =
                             std_in = CreatePipe,
                             std_out = CreatePipe,
                             std_err = Inherit,
-                            close_fds = True}
+                            close_fds = True
+#if MIN_VERSION_process(1,1,0)
+			    -- Added field in process 1.1.0.0:
+			    , create_group = False
+#endif
+			   }
     in do (ih', oh', _, ph) <- createProcess cp
           let ih = fromJust ih'
           let oh = fromJust oh'
@@ -318,8 +329,9 @@ printCmdSpec (RawCommand fp args) = show (fp, args)
 -- Pipes
 ------------------------------------------------------------
 
-data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
-   deriving Show
+data PipeCommand a b = (ShellCommand a, ShellCommand b) => PipeCommand a b
+
+deriving instance Show (PipeCommand a b)
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
@@ -573,8 +585,9 @@ instance Show EnvironFilter where
 
 This is a low-level interface; see 'setenv' and 'unsetenv' for more
 convenient interfaces. -}
-data (ShellCommand a) => EnvironCommand a = EnvironCommand EnvironFilter a
-     deriving Show
+data EnvironCommand a = (ShellCommand a) => EnvironCommand EnvironFilter a
+
+deriving instance Show (EnvironCommand a)
 
 instance (ShellCommand a) => ShellCommand (EnvironCommand a) where
     fdInvoke (EnvironCommand efilter cmd) Nothing ichan =
