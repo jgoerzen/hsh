@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances #-}
+{-# OPTIONS_GHC -XFlexibleInstances -XTypeSynonymInstances -XStandaloneDeriving #-}
 
 {- Commands for HSH
 Copyright (C) 2004-2008 John Goerzen <jgoerzen@complete.org>
@@ -318,8 +318,9 @@ printCmdSpec (RawCommand fp args) = show (fp, args)
 -- Pipes
 ------------------------------------------------------------
 
-data (ShellCommand a, ShellCommand b) => PipeCommand a b = PipeCommand a b
-   deriving Show
+data PipeCommand a b = (ShellCommand a, ShellCommand b) => PipeCommand a b
+
+deriving instance Show (PipeCommand a b)
 
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
@@ -573,8 +574,9 @@ instance Show EnvironFilter where
 
 This is a low-level interface; see 'setenv' and 'unsetenv' for more
 convenient interfaces. -}
-data (ShellCommand a) => EnvironCommand a = EnvironCommand EnvironFilter a
-     deriving Show
+data EnvironCommand a = (ShellCommand a) => EnvironCommand EnvironFilter a
+
+deriving instance Show (EnvironCommand a)
 
 instance (ShellCommand a) => ShellCommand (EnvironCommand a) where
     fdInvoke (EnvironCommand efilter cmd) Nothing ichan =
