@@ -292,7 +292,10 @@ genericCommand c environ (ChanHandle ih) =
                             std_in = UseHandle ih,
                             std_out = CreatePipe,
                             std_err = Inherit,
-                            close_fds = True}
+                            close_fds = True
+			    -- Added field in process 1.1.0.0:
+			    -- create_group :: Bool
+			   }
     in do (_, oh', _, ph) <- createProcess cp
           let oh = fromJust oh'
           return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
@@ -303,7 +306,10 @@ genericCommand cspec environ ichan =
                             std_in = CreatePipe,
                             std_out = CreatePipe,
                             std_err = Inherit,
-                            close_fds = True}
+                            close_fds = True
+			    -- Added field in process 1.1.0.0:
+			    -- create_group :: Bool
+			   }
     in do (ih', oh', _, ph) <- createProcess cp
           let ih = fromJust ih'
           let oh = fromJust oh'
