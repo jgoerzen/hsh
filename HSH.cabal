@@ -23,26 +23,43 @@ flag buildtests
   description: Build the executable to run unit tests
   default: False
 
+flag newerprocess
+  description: Build using the process-1.1 as opposed to 1.0 API.
+  default: False
+
+
 library
   Exposed-Modules: HSH, HSH.Command, HSH.ShellEquivs, HSH.Channel
   Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances, FlexibleContexts, CPP
-  Build-Depends: base >= 4 && < 5, process < 1.1.0.0, mtl, regex-compat, MissingH>=1.0.0,
+  Build-Depends: base >= 4 && < 5, mtl, regex-compat, MissingH>=1.0.0,
     hslogger, filepath, regex-base, regex-posix, directory,
     bytestring
   if !os(windows)
     Build-Depends: unix
+  if flag(newerprocess)
+    Build-Depends: process >= 1.1.0.0
+  else 
+    Build-Depends: process < 1.1.0.0
   GHC-Options: -O2 -threaded -Wall
+
+  if flag(newerprocess)
+    GHC-options: -DPROCESS_LIB_1_1
+
 
 Executable runtests
   if flag(buildtests)
     Buildable: True
-    Build-Depends: base >= 4 && < 5, process < 1.1.0.0, mtl, regex-compat,
+    Build-Depends: base >= 4 && < 5, mtl, regex-compat,
       MissingH>=1.0.0,
       hslogger, filepath, regex-base, regex-posix, directory,
       bytestring, HUnit, testpack
     if !os(windows)
       Build-Depends: unix
+    if flag(newerprocess)
+      Build-Depends: process >= 1.1.0.0
+    else 
+      Build-Depends: process < 1.1.0.0
   else
     Buildable: False
   Main-Is: runtests.hs
@@ -50,3 +67,6 @@ Executable runtests
   Extensions: ExistentialQuantification, OverlappingInstances,
     UndecidableInstances, FlexibleContexts, CPP
   GHC-Options: -O2 -threaded
+
+  if flag(newerprocess)
+    GHC-options: -DPROCESS_LIB_1_1
