@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {- Shell Equivalents
 Copyright (C) 2004-2009 John Goerzen <jgoerzen@complete.org>
 Please see the COPYRIGHT file
@@ -84,7 +85,7 @@ import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
-import Control.Exception(evaluate)
+import qualified Control.Exception as E 
 -- import System.FilePath (splitPath)
 
 #ifdef __HSH_POSIX__
@@ -250,7 +251,7 @@ cut pos = cutR [pos]
 discard :: Channel -> IO Channel
 discard inh =
     do c <- chanAsBSL inh
-       evaluate (BSL.length c)
+       E.evaluate (BSL.length c)
        return (ChanString "")
 
 {- | Split a list by a given character and select ranges of the resultant lists.
@@ -314,7 +315,7 @@ The tilde with no username equates to the current user.
 Non-tilde expansion is done by the MissingH module System.Path.Glob. -}
 glob :: FilePath -> IO [FilePath]
 glob inp@('~':remainder) =
-    catch expanduser (\_ -> Glob.glob rest)
+    E.catch expanduser (\(e::E.SomeException) -> Glob.glob rest)
     where (username, rest) = span (/= '/') remainder
 #ifdef __HSH_POSIX__
           expanduser =

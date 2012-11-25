@@ -39,11 +39,11 @@ import Prelude hiding (catch)
 import System.IO
 import System.Exit
 import System.Log.Logger
-import System.IO.Error hiding (catch)
+import System.IO.Error (isUserError, ioeGetErrorString)
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
-import Control.Exception(evaluate, SomeException, catch)
+import Control.Exception(evaluate, SomeException, catch, try)
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)
