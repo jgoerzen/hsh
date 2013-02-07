@@ -43,7 +43,7 @@ import System.IO.Error hiding (catch)
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
-import Control.Exception(evaluate, SomeException, catch)
+import Control.Exception(try, evaluate, SomeException, catch)
 import Text.Regex.Posix
 import Control.Monad(when)
 import Data.String.Utils(rstrip)

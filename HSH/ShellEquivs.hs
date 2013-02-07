@@ -20,6 +20,8 @@ HSH entirely as well.
 
 -}
 
+{-# LANGUAGE ScopedTypeVariables #-}
+
 #if !(defined(mingw32_HOST_OS) || defined(mingw32_TARGET_OS) || defined(__MINGW32__))
 #define __HSH_POSIX__
 #else
@@ -84,7 +86,7 @@ import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
 import System.Directory hiding (createDirectory)
-import Control.Exception(evaluate)
+import Control.Exception(evaluate, catch, try, SomeException(..))
 -- import System.FilePath (splitPath)
 
 #ifdef __HSH_POSIX__
@@ -314,7 +316,7 @@ The tilde with no username equates to the current user.
 Non-tilde expansion is done by the MissingH module System.Path.Glob. -}
 glob :: FilePath -> IO [FilePath]
 glob inp@('~':remainder) =
-    catch expanduser (\_ -> Glob.glob rest)
+    catch expanduser (\(e::SomeException) -> Glob.glob rest)
     where (username, rest) = span (/= '/') remainder
 #ifdef __HSH_POSIX__
           expanduser =
