@@ -86,7 +86,7 @@ Some pre-defined instances include:
    handle and write to the second.
 
  * Various functions.  These functions will accept input representing
-   its standard input and output will go to standard output.  
+   its standard input and output will go to standard output.
 
 Some pre-defined instance functions include:
 
@@ -279,7 +279,7 @@ instance ShellCommand String where
     fdInvoke cmd = genericCommand (ShellCommand cmd)
 
 {- | How to we handle and external command. -}
-genericCommand :: CmdSpec 
+genericCommand :: CmdSpec
                -> Environment
                -> Channel
                -> IO (Channel, [InvokeResult])
@@ -302,7 +302,7 @@ genericCommand c environ (ChanHandle ih) =
     in do (_, oh', _, ph) <- createProcess cp
           let oh = fromJust oh'
           return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
-genericCommand cspec environ ichan = 
+genericCommand cspec environ ichan =
     let cp = CreateProcess {cmdspec = cspec,
                             cwd = Nothing,
                             env = environ,
@@ -448,10 +448,10 @@ intermediateStringlikeResult chanfunc cmd =
            c <- chanfunc ochan
            return (c, processResults r)
 
-genericStringlikeResult :: ShellCommand b => 
+genericStringlikeResult :: ShellCommand b =>
                            (Channel -> IO a)
                         -> (a -> IO c)
-                        -> b 
+                        -> b
                         -> IO a
 genericStringlikeResult chanfunc evalfunc cmd =
         do (c, r) <- intermediateStringlikeResult chanfunc cmd
@@ -484,7 +484,7 @@ checkResults (cmd, ps) =
          ExitSuccess -> return ()
          ExitFailure x ->
              fail $ cmd ++ ": exited with code " ++ show x
-{- FIXME: generate these again 
+{- FIXME: generate these again
          Terminated sig ->
              fail $ cmd ++ ": terminated by signal " ++ show sig
          Stopped sig ->
@@ -636,7 +636,7 @@ setenv :: (ShellCommand cmd) => [(String, String)] -> cmd -> EnvironCommand cmd
 setenv items cmd =
     EnvironCommand efilter cmd
     where efilter ienv = foldr efilter' ienv items
-          efilter' (key, val) ienv = 
+          efilter' (key, val) ienv =
               (key, val) : (filter (\(k, _) -> k /= key) ienv)
 
 {- | Removes an environment variable if it exists; does nothing otherwise.
