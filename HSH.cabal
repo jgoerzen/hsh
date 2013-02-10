@@ -19,6 +19,10 @@ Description: HSH is designed to let you mix and match shell expressions with
 Cabal-Version: >=1.2.3
 Build-type: Simple
 
+source-repository head
+  type:     git
+  location: git://github.com/jgoerzen/hsh.git
+
 flag buildtests
   description: Build the executable to run unit tests
   default: False
