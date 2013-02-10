@@ -415,15 +415,24 @@ instance RunResult (IO [String]) where
                  return (lines r)
 
 instance RunResult (IO String) where
+    run cmd = fmap fst (run cmd :: IO (String, String))
+
+instance RunResult (IO (String, String)) where
     run cmd = genericStringlikeResult chanAsString (\c -> evaluate (length c))
               cmd
 
 instance RunResult (IO BSL.ByteString) where
+    run cmd = fmap fst (run cmd :: IO (BSL.ByteString, BSL.ByteString))
+
+instance RunResult (IO (BSL.ByteString, BSL.ByteString)) where
     run cmd = genericStringlikeResult chanAsBSL
               (\c -> evaluate (BSL.length c))
               cmd
 
 instance RunResult (IO BS.ByteString) where
+    run cmd = fmap fst (run cmd :: IO (BS.ByteString, BS.ByteString))
+
+instance RunResult (IO (BS.ByteString, BS.ByteString)) where
     run cmd = genericStringlikeResult chanAsBS
               (\c -> evaluate (BS.length c))
               cmd
@@ -431,11 +440,20 @@ instance RunResult (IO BS.ByteString) where
 instance RunResult (IO (String, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsString cmd
 
+instance RunResult (IO (String, String, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResultErr chanAsString cmd
+
 instance RunResult (IO (BSL.ByteString, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsBSL cmd
 
+instance RunResult (IO (BSL.ByteString, BSL.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResultErr chanAsBSL cmd
+
 instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsBS cmd
+
+instance RunResult (IO (BS.ByteString, BS.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResultErr chanAsBS cmd
 
 instance RunResult (IO (IO (String, ExitCode))) where
     run cmd = do (ochan, echan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
@@ -447,24 +465,33 @@ intermediateStringlikeResult :: ShellCommand b =>
                              -> b
                              -> IO (a, IO (String, ExitCode))
 intermediateStringlikeResult chanfunc cmd =
+        do (or, er, r) <- intermediateStringlikeResultErr chanfunc cmd
+           return (or, r)
+
+intermediateStringlikeResultErr :: ShellCommand b =>
+                                   (Channel -> IO a)
+                                -> b
+                                -> IO (a, a, IO (String, ExitCode))
+intermediateStringlikeResultErr chanfunc cmd =
         do (ochan, echan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
-           c <- chanfunc ochan
-           return (c, processResults r)
+           or <- chanfunc ochan
+           er <- chanfunc echan
+           return (or, er, processResults r)
 
 genericStringlikeResult :: ShellCommand b =>
                            (Channel -> IO a)
                         -> (a -> IO c)
                         -> b
-                        -> IO a
+                        -> IO (a, a)
 genericStringlikeResult chanfunc evalfunc cmd =
-        do (c, r) <- intermediateStringlikeResult chanfunc cmd
-           evalfunc c
+        do (o, e, r) <- intermediateStringlikeResultErr chanfunc cmd
+           evalfunc o
            --evaluate (length c)
            -- d "runS 6"
            -- d "runS 7"
            r >>= checkResults
            -- d "runS 8"
-           return c
+           return (o, e)
 
 {- | Evaluates the result codes and returns an overall status -}
 processResults :: [InvokeResult] -> IO (String, ExitCode)
