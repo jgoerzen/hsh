@@ -494,7 +494,7 @@ checkResults (cmd, ps) =
 {- | Handle an exception derived from a program exiting abnormally -}
 tryEC :: IO a -> IO (Either ExitCode a)
 tryEC action =
-    do r <- try action
+    do r <- Control.Exception.try action
        case r of
          Left ioe ->
           if isUserError ioe then
