@@ -316,7 +316,7 @@ The tilde with no username equates to the current user.
 Non-tilde expansion is done by the MissingH module System.Path.Glob. -}
 glob :: FilePath -> IO [FilePath]
 glob inp@('~':remainder) =
-    catch expanduser (\(e::SomeException) -> Glob.glob rest)
+    Control.Exception.catch expanduser (\(e::SomeException) -> Glob.glob rest)
     where (username, rest) = span (/= '/') remainder
 #ifdef __HSH_POSIX__
           expanduser =
