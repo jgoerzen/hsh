@@ -298,6 +298,9 @@ genericCommand c environ (ChanHandle ih) =
 			    -- Added field in process 1.1.0.0:
 			    , create_group = False
 #endif
+#if MIN_VERSION_process(1,2,0)
+			    , delegate_ctlc = False
+#endif
 			   }
     in do (_, oh', _, ph) <- createProcess cp
           let oh = fromJust oh'
@@ -313,6 +316,9 @@ genericCommand cspec environ ichan =
 #if MIN_VERSION_process(1,1,0)
 			    -- Added field in process 1.1.0.0:
 			    , create_group = False
+#endif
+#if MIN_VERSION_process(1,2,0)
+			    , delegate_ctlc = False
 #endif
 			   }
     in do (ih', oh', _, ph) <- createProcess cp
