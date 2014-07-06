@@ -1,5 +1,5 @@
 Name: HSH
-Version: 2.1.0
+Version: 2.2.0
 License: LGPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
 Author: John Goerzen
@@ -18,6 +18,10 @@ Description: HSH is designed to let you mix and match shell expressions with
 
 Cabal-Version: >=1.2.3
 Build-type: Simple
+
+source-repository head
+  type:     git
+  location: git://github.com/jgoerzen/hsh.git
 
 flag buildtests
   description: Build the executable to run unit tests

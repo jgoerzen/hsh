@@ -45,7 +45,7 @@ import Data.Maybe
 import Data.List.Utils(uniq)
 import Control.Exception(try, evaluate, SomeException, catch)
 import Text.Regex.Posix
-import Control.Monad(when)
+import Control.Monad(when, liftM2)
 import Data.String.Utils(rstrip)
 import Control.Concurrent
 import System.Process
@@ -86,7 +86,7 @@ Some pre-defined instances include:
    handle and write to the second.
 
  * Various functions.  These functions will accept input representing
-   its standard input and output will go to standard output.  
+   its standard input and output will go to standard output.
 
 Some pre-defined instance functions include:
 
@@ -108,7 +108,7 @@ class (Show a) => ShellCommand a where
     fdInvoke :: a               -- ^ The command
              -> Environment     -- ^ The environment
              -> Channel         -- ^ Where to read input from
-             -> IO (Channel, [InvokeResult]) -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
+             -> IO (Channel, Channel, [InvokeResult]) -- ^ Returns an action that, when evaluated, waits for the process to finish and returns an exit code.
 
 instance Show (Handle -> Handle -> IO ()) where
     show _ = "(Handle -> Handle -> IO ())"
@@ -200,7 +200,7 @@ instance ShellCommand (() -> BS.ByteString) where
 
 instance ShellCommand (Channel -> IO Channel) where
     fdInvoke func _ cstdin =
-        runInHandler (show func) (func cstdin)
+        runInHandler' (show func) (func cstdin)
 
 {-
 instance ShellCommand (Handle -> Handle -> IO ()) where
@@ -213,10 +213,10 @@ genericStringlikeIO :: (Show (a -> IO a), Channelizable a) =>
                     -> (a -> IO a)
                     -> Environment
                     -> Channel
-                    -> IO (Channel, [InvokeResult])
+                    -> IO (Channel, Channel, [InvokeResult])
 genericStringlikeIO dechanfunc userfunc _ cstdin =
     do contents <- dechanfunc cstdin
-       runInHandler (show userfunc) (realfunc contents)
+       runInHandler' (show userfunc) (realfunc contents)
     where realfunc contents = do r <- userfunc contents
                                  return (toChannel r)
 
@@ -224,9 +224,9 @@ genericStringlikeO :: (Show (() -> IO a), Channelizable a) =>
                       (() -> IO a)
                    -> Environment
                    -> Channel
-                   -> IO (Channel, [InvokeResult])
+                   -> IO (Channel, Channel, [InvokeResult])
 genericStringlikeO userfunc _ _ =
-    runInHandler (show userfunc) realfunc
+    runInHandler' (show userfunc) realfunc
         where realfunc :: IO Channel
               realfunc = do r <- userfunc ()
                             return (toChannel r)
@@ -279,10 +279,10 @@ instance ShellCommand String where
     fdInvoke cmd = genericCommand (ShellCommand cmd)
 
 {- | How to we handle and external command. -}
-genericCommand :: CmdSpec 
+genericCommand :: CmdSpec
                -> Environment
                -> Channel
-               -> IO (Channel, [InvokeResult])
+               -> IO (Channel, Channel, [InvokeResult])
 
 -- Handling external command when stdin channel is a Handle
 genericCommand c environ (ChanHandle ih) =
@@ -291,7 +291,7 @@ genericCommand c environ (ChanHandle ih) =
                             env = environ,
                             std_in = UseHandle ih,
                             std_out = CreatePipe,
-                            std_err = Inherit,
+                            std_err = CreatePipe,
                             close_fds = True
 #if MIN_VERSION_process(1,1,0)
 -- Or use GHC version as a proxy:  __GLASGOW_HASKELL__ >= 720
@@ -302,10 +302,11 @@ genericCommand c environ (ChanHandle ih) =
 			    , delegate_ctlc = False
 #endif
 			   }
-    in do (_, oh', _, ph) <- createProcess cp
+    in do (_, oh', eh', ph) <- createProcess cp
           let oh = fromJust oh'
-          return (ChanHandle oh, [(printCmdSpec c, waitForProcess ph)])
-genericCommand cspec environ ichan = 
+              eh = fromJust eh'
+          return (ChanHandle oh, ChanHandle eh, [(printCmdSpec c, waitForProcess ph)])
+genericCommand cspec environ ichan =
     let cp = CreateProcess {cmdspec = cspec,
                             cwd = Nothing,
                             env = environ,
@@ -321,11 +322,12 @@ genericCommand cspec environ ichan =
 			    , delegate_ctlc = False
 #endif
 			   }
-    in do (ih', oh', _, ph) <- createProcess cp
+    in do (ih', oh', eh', ph) <- createProcess cp
           let ih = fromJust ih'
           let oh = fromJust oh'
+              eh = fromJust eh'
           chanToHandle True ichan ih
-          return (ChanHandle oh, [(printCmdSpec cspec, waitForProcess ph)])
+          return (ChanHandle oh, ChanHandle eh, [(printCmdSpec cspec, waitForProcess ph)])
 
 printCmdSpec :: CmdSpec -> String
 printCmdSpec (ShellCommand s) = s
@@ -342,9 +344,10 @@ deriving instance Show (PipeCommand a b)
 {- | An instance of 'ShellCommand' represeting a pipeline. -}
 instance (ShellCommand a, ShellCommand b) => ShellCommand (PipeCommand a b) where
     fdInvoke (PipeCommand cmd1 cmd2) env ichan =
-        do (chan1, res1) <- fdInvoke cmd1 env ichan
-           (chan2, res2) <- fdInvoke cmd2 env chan1
-           return (chan2, res1 ++ res2)
+        do (chan1, err1, res1) <- fdInvoke cmd1 env ichan
+           (chan2, err2, res2) <- fdInvoke cmd2 env chan1
+           err <- liftM2 BSL.append (chanAsBSL err1) (chanAsBSL err2)
+           return (chan2, toChannel err, res1 ++ res2)
 
 {- | Pipe the output of the first command into the input of the second. -}
 (-|-) :: (ShellCommand a, ShellCommand b) => a -> b -> PipeCommand a b
@@ -396,7 +399,7 @@ instance RunResult (IO ()) where
 
 instance RunResult (IO (String, ExitCode)) where
     run cmd =
-        do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
+        do (ochan, echan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
            chanToHandle False ochan stdout
            processResults r
 
@@ -418,15 +421,24 @@ instance RunResult (IO [String]) where
                  return (lines r)
 
 instance RunResult (IO String) where
+    run cmd = fmap fst (run cmd :: IO (String, String))
+
+instance RunResult (IO (String, String)) where
     run cmd = genericStringlikeResult chanAsString (\c -> evaluate (length c))
               cmd
 
 instance RunResult (IO BSL.ByteString) where
+    run cmd = fmap fst (run cmd :: IO (BSL.ByteString, BSL.ByteString))
+
+instance RunResult (IO (BSL.ByteString, BSL.ByteString)) where
     run cmd = genericStringlikeResult chanAsBSL
               (\c -> evaluate (BSL.length c))
               cmd
 
 instance RunResult (IO BS.ByteString) where
+    run cmd = fmap fst (run cmd :: IO (BS.ByteString, BS.ByteString))
+
+instance RunResult (IO (BS.ByteString, BS.ByteString)) where
     run cmd = genericStringlikeResult chanAsBS
               (\c -> evaluate (BS.length c))
               cmd
@@ -434,14 +446,23 @@ instance RunResult (IO BS.ByteString) where
 instance RunResult (IO (String, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsString cmd
 
+instance RunResult (IO (String, String, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResultErr chanAsString cmd
+
 instance RunResult (IO (BSL.ByteString, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsBSL cmd
+
+instance RunResult (IO (BSL.ByteString, BSL.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResultErr chanAsBSL cmd
 
 instance RunResult (IO (BS.ByteString, IO (String, ExitCode))) where
     run cmd = intermediateStringlikeResult chanAsBS cmd
 
+instance RunResult (IO (BS.ByteString, BS.ByteString, IO (String, ExitCode))) where
+    run cmd = intermediateStringlikeResultErr chanAsBS cmd
+
 instance RunResult (IO (IO (String, ExitCode))) where
-    run cmd = do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
+    run cmd = do (ochan, echan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
                  chanToHandle False ochan stdout
                  return (processResults r)
 
@@ -450,24 +471,33 @@ intermediateStringlikeResult :: ShellCommand b =>
                              -> b
                              -> IO (a, IO (String, ExitCode))
 intermediateStringlikeResult chanfunc cmd =
-        do (ochan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
-           c <- chanfunc ochan
-           return (c, processResults r)
+        do (or, er, r) <- intermediateStringlikeResultErr chanfunc cmd
+           return (or, r)
 
-genericStringlikeResult :: ShellCommand b => 
+intermediateStringlikeResultErr :: ShellCommand b =>
+                                   (Channel -> IO a)
+                                -> b
+                                -> IO (a, a, IO (String, ExitCode))
+intermediateStringlikeResultErr chanfunc cmd =
+        do (ochan, echan, r) <- fdInvoke cmd Nothing (ChanHandle stdin)
+           or <- chanfunc ochan
+           er <- chanfunc echan
+           return (or, er, processResults r)
+
+genericStringlikeResult :: ShellCommand b =>
                            (Channel -> IO a)
                         -> (a -> IO c)
-                        -> b 
-                        -> IO a
+                        -> b
+                        -> IO (a, a)
 genericStringlikeResult chanfunc evalfunc cmd =
-        do (c, r) <- intermediateStringlikeResult chanfunc cmd
-           evalfunc c
+        do (o, e, r) <- intermediateStringlikeResultErr chanfunc cmd
+           evalfunc o
            --evaluate (length c)
            -- d "runS 6"
            -- d "runS 7"
            r >>= checkResults
            -- d "runS 8"
-           return c
+           return (o, e)
 
 {- | Evaluates the result codes and returns an overall status -}
 processResults :: [InvokeResult] -> IO (String, ExitCode)
@@ -490,7 +520,7 @@ checkResults (cmd, ps) =
          ExitSuccess -> return ()
          ExitFailure x ->
              fail $ cmd ++ ": exited with code " ++ show x
-{- FIXME: generate these again 
+{- FIXME: generate these again
          Terminated sig ->
              fail $ cmd ++ ": terminated by signal " ++ show sig
          Stopped sig ->
@@ -563,16 +593,22 @@ the exception may go uncaught here.
 NOTE: expects func to be lazy!
  -}
 runInHandler :: String           -- ^ Description of this function
-            -> (IO Channel)     -- ^ The action to run in the thread
-            -> IO (Channel, [InvokeResult])
+            -> (IO (Channel, Channel))     -- ^ The action to run in the thread
+            -> IO (Channel, Channel, [InvokeResult])
 runInHandler descrip func =
     catch (realfunc) (exchandler)
-    where realfunc = do r <- func
-                        return (r, [(descrip, return ExitSuccess)])
-          exchandler :: SomeException -> IO (Channel, [InvokeResult])
+    where realfunc = do (out, err) <- func
+                        return (out, err, [(descrip, return ExitSuccess)])
+          exchandler :: SomeException -> IO (Channel, Channel, [InvokeResult])
           exchandler e = do em $ "runInHandler/" ++ descrip ++ ": " ++ show e
-                            return (ChanString "", [(descrip, return (ExitFailure 1))])
+                            return (ChanString "", ChanString "", [(descrip, return (ExitFailure 1))])
 
+runInHandler' :: String           -- ^ Description of this function
+            -> (IO Channel)     -- ^ The action to run in the thread
+            -> IO (Channel, Channel, [InvokeResult])
+runInHandler' cmd action = runInHandler cmd $ do
+    out <- action
+    return (out, toChannel "")
 
 ------------------------------------------------------------
 -- Environment
@@ -642,7 +678,7 @@ setenv :: (ShellCommand cmd) => [(String, String)] -> cmd -> EnvironCommand cmd
 setenv items cmd =
     EnvironCommand efilter cmd
     where efilter ienv = foldr efilter' ienv items
-          efilter' (key, val) ienv = 
+          efilter' (key, val) ienv =
               (key, val) : (filter (\(k, _) -> k /= key) ienv)
 
 {- | Removes an environment variable if it exists; does nothing otherwise.
