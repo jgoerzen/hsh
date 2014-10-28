@@ -39,7 +39,7 @@ import Prelude hiding (catch)
 import System.IO
 import System.Exit
 import System.Log.Logger
-import System.IO.Error hiding (catch)
+import System.IO.Error (isUserError, ioeGetErrorString)
 import Data.Maybe.Utils
 import Data.Maybe
 import Data.List.Utils(uniq)
