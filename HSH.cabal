@@ -1,10 +1,10 @@
 Name: HSH
-Version: 2.1.1
+Version: 2.1.2
 License: LGPL
 Maintainer: John Goerzen <jgoerzen@complete.org>
 Author: John Goerzen
 Stability: Beta
-Copyright: Copyright (c) 2006-2009 John Goerzen
+Copyright: Copyright (c) 2006-2014 John Goerzen
 Category: system
 license-file: COPYRIGHT
 extra-source-files: COPYING
