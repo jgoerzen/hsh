@@ -112,7 +112,12 @@ import HSH.Channel
 import HSH.Command(setenv, unsetenv)
 
 {- | Return the absolute path of the arg.  Raises an error if the
-computation is impossible. -}
+computation is impossible. This is a thin wrapper around
+System.Path.absNormPath.  Unix/Linux users note:
+System.Path.absNormPath is known to produce odd results when
+a tilde expansion is requested; you might prefer 'glob' to this
+function if you know your input is free of wildcards. See
+https://github.com/jgoerzen/hsh/issues/7 for details. -}
 abspath :: FilePath -> IO FilePath
 abspath inp =
     do p <- pwd
