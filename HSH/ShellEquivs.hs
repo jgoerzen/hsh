@@ -86,8 +86,8 @@ import Data.Char (toLower, toUpper)
 import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
-import System.Directory hiding (createDirectory)
-import qualified Control.Exception as E 
+import System.Directory hiding (createDirectory, isSymbolicLink)
+import qualified Control.Exception as E
 -- import System.FilePath (splitPath)
 
 #ifdef __HSH_POSIX__
@@ -97,13 +97,14 @@ import System.Posix.Directory (createDirectory)
 import System.Posix.Types (FileMode())
 import System.Posix.IO
 import System.Posix.Error
+#else
+import System.Directory (createDirectory)
 #endif
 
 import System.Path (absNormPath, bracketCWD)
 import System.Exit
 import System.IO
 import System.Process
-import qualified System.Directory as SD
 import qualified System.Path.Glob as Glob (glob)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
@@ -363,7 +364,7 @@ mkdir :: FilePath -> FileMode -> IO ()
 mkdir = createDirectory
 #else
 mkdir :: FilePath -> a -> IO ()
-mkdir fp _ = SD.createDirectory fp
+mkdir fp _ = createDirectory fp
 #endif
 
 {- | Number each line of a file -}
