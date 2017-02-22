@@ -86,7 +86,7 @@ import Data.Char (toLower, toUpper)
 import Text.Regex (matchRegex, mkRegex)
 import Text.Printf (printf)
 import Control.Monad (foldM)
-import System.Directory hiding (createDirectory)
+import System.Directory hiding (createDirectory, isSymbolicLink)
 import qualified Control.Exception as E 
 -- import System.FilePath (splitPath)
 
