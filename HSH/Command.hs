@@ -301,6 +301,18 @@ genericCommand c environ (ChanHandle ih) =
 #if MIN_VERSION_process(1,2,0)
 			    , delegate_ctlc = False
 #endif
+#if MIN_VERSION_process(1,3,0)
+          , detach_console = False
+          , create_new_console = False
+          , new_session = False
+#endif
+#if MIN_VERSION_process(1,4,0)
+          , child_group = Nothing
+          , child_user = Nothing
+#endif
+#if MIN_VERSION_process(1,5,0)
+          , use_process_jobs = False
+#endif
 			   }
     in do (_, oh', _, ph) <- createProcess cp
           let oh = fromJust oh'
@@ -319,6 +331,18 @@ genericCommand cspec environ ichan =
 #endif
 #if MIN_VERSION_process(1,2,0)
 			    , delegate_ctlc = False
+#endif
+#if MIN_VERSION_process(1,3,0)
+          , detach_console = False
+          , create_new_console = False
+          , new_session = False
+#endif
+#if MIN_VERSION_process(1,4,0)
+          , child_group = Nothing
+          , child_user = Nothing
+#endif
+#if MIN_VERSION_process(1,5,0)
+          , use_process_jobs = False
 #endif
 			   }
     in do (ih', oh', _, ph) <- createProcess cp
