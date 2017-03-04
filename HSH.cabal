@@ -32,7 +32,7 @@ library
     bytestring
   if !os(windows)
     Build-Depends: unix
-  GHC-Options: -O2 -threaded -Wall
+  GHC-Options: -O2 -Wall
 
 Executable runtests
   if flag(buildtests)
