@@ -21,8 +21,6 @@ HSH entirely as well.
 
 -}
 
-{-# LANGUAGE ScopedTypeVariables #-}
-
 #if !(defined(mingw32_HOST_OS) || defined(mingw32_TARGET_OS) || defined(__MINGW32__))
 #define __HSH_POSIX__
 #else
@@ -225,7 +223,11 @@ catToFIFO fp ichan =
 fifoOpen :: FilePath -> IO Handle
 fifoOpen fp = 
     do fd <- throwErrnoPathIf (< 0) "HSH fifoOpen" fp $ 
+#if MIN_VERSION_unix(2,8,0)
+             openFd fp WriteOnly defaultFileFlags
+#else
              openFd fp WriteOnly Nothing defaultFileFlags
+#endif
        fdToHandle fd
 
 #endif
